@@ -1,0 +1,350 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-capable" content="yes">
+<title>용세 대장간</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Nanum+Myeongjo:wght@700;800&family=IBM+Plex+Sans+KR:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+/* VOICE: grim, heavy, quiet — a smithy at night where every blow could ruin a month's work
+   IDEA: the smith's iron ledger plate bolted beside the forge; soot-black steel, tarnished bronze rule lines
+   PICTURE: the full-bleed 3D forge (anvil, hearth, caged dragon) on the left; the ledger plate docked on the right
+   COLOUR and TYPE: soot #0a0807, bone #e6ddd0, tarnished bronze #c9a66b, coal ember #d0652a, dried blood #a8372b; Nanum Myeongjo for titles, IBM Plex Sans KR for numbers and body
+   LAYOUT: landscape-first: 3D view + right-docked plate; portrait phones are asked to rotate */
+:root{color-scheme:dark;--bg:#050403;--plate:rgba(9,7,6,.9);--plate2:rgba(22,17,14,.92);--line:rgba(201,166,107,.2);--line2:rgba(201,166,107,.42);--ink:#e6ddd0;--dim:#978b7e;--gold:#c9a66b;--ember:#d0652a;--blood:#a8372b;--good:#8fb78f;
+--gs:#e6c25a;--s:#cf8a3e;--h:#7a6f66;--d:#b0532f;--b:#575b72;--sheetW:clamp(300px,33vw,420px);--sa-r:env(safe-area-inset-right);--sa-l:env(safe-area-inset-left);--sa-b:env(safe-area-inset-bottom)}
+*{box-sizing:border-box;min-width:0}
+[hidden]{display:none!important}
+html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font:15px/1.45 "IBM Plex Sans KR",system-ui,sans-serif;overflow:hidden;-webkit-user-select:none;user-select:none;touch-action:manipulation;-webkit-tap-highlight-color:transparent}
+canvas#c{position:fixed;inset:0;width:100%;height:100%;display:block}
+button{font:inherit;color:inherit;cursor:pointer;border:0;background:none}
+button:focus-visible,input:focus-visible,select:focus-visible{outline:1px solid var(--gold);outline-offset:2px}
+.h{font-family:"Nanum Myeongjo",serif;font-weight:800;letter-spacing:-.01em}
+.screen{position:fixed;inset:0;display:none;align-items:center;justify-content:center;padding:18px;z-index:20;background:linear-gradient(90deg,rgba(3,2,2,.88),rgba(3,2,2,.35) 60%,rgba(3,2,2,.6))}
+.screen.show{display:flex}
+.card{background:var(--plate);border:1px solid var(--line);border-radius:4px;box-shadow:0 30px 80px rgba(0,0,0,.7),inset 0 1px 0 rgba(255,230,190,.04);padding:22px;width:min(560px,100%);max-height:calc(100vh - 36px);overflow:auto;position:relative}
+.card::before{content:"";position:absolute;inset:5px;border:1px solid rgba(201,166,107,.08);pointer-events:none}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:44px;padding:9px 16px;border-radius:3px;background:linear-gradient(#211a16,#140f0c);border:1px solid rgba(201,166,107,.28);font-weight:600;letter-spacing:.01em;transition:filter .15s,transform .06s;box-shadow:inset 0 1px 0 rgba(255,230,190,.06)}
+.btn:hover{filter:brightness(1.3)}.btn:active{transform:translateY(1px)}
+.btn.pri{background:linear-gradient(#8c3c19,#55210d);border-color:#c0653a;color:#f6e6d4}
+.btn.gold{background:linear-gradient(#5e4a2a,#3a2c17);border-color:#b89058;color:#f2e2c2}
+.btn.ghost{background:rgba(255,255,255,.02);border-color:rgba(255,255,255,.1)}
+.btn.sm{min-height:34px;padding:5px 10px;font-size:13px}
+.btn:disabled{opacity:.33;pointer-events:none}
+input,select{font:inherit;font-size:16px;color:var(--ink);background:#0e0b09;border:1px solid rgba(255,255,255,.12);border-radius:3px;padding:9px 12px;min-height:44px;width:100%}
+label.f{display:grid;gap:6px;font-size:13px;color:var(--dim)}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.grid2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.seg{display:flex;background:#0e0b09;border:1px solid rgba(255,255,255,.1);border-radius:3px;padding:3px;gap:3px}
+.seg button{flex:1;min-height:36px;border-radius:2px;font-size:14px;color:var(--dim)}
+.seg button.on{background:linear-gradient(#5e2a14,#3a180b);color:var(--ink);box-shadow:inset 0 0 0 1px rgba(208,101,42,.5)}
+.muted{color:var(--dim)}.small{font-size:13px}
+hr.rule{border:0;border-top:1px solid var(--line);margin:16px 0}
+/* title */
+#title{justify-content:flex-start;padding-left:max(6vw,24px)}
+#title .wrap{width:min(460px,100%)}
+#title h1{font-size:clamp(44px,7vw,84px);line-height:1;margin:0;color:#efe3cf;text-shadow:0 2px 30px rgba(208,101,42,.35),0 2px 0 #000}
+#title .sub{letter-spacing:.6em;color:var(--gold);font-size:12px;margin:12px 0 4px;opacity:.8}
+#title .tag{color:#cfc3b2;margin:10px 0 24px;max-width:380px}
+#title .menu{display:grid;gap:8px;width:min(320px,100%)}
+#title .menu .btn{min-height:50px;font-size:16px;justify-content:flex-start;padding-left:18px}
+.nick{margin:16px 0 0;width:min(320px,100%)}
+/* HUD */
+#hud{position:fixed;inset:0;pointer-events:none;z-index:10;display:none}
+#hud.show{display:block}
+#hud .pe{pointer-events:auto}
+#top{position:absolute;left:max(10px,var(--sa-l));top:10px;right:calc(var(--sheetW) + 10px);display:flex;gap:8px;align-items:stretch;flex-wrap:wrap}
+.chip{background:var(--plate);border:1px solid var(--line);border-radius:3px;padding:7px 11px;display:flex;align-items:center;gap:10px}
+#dayChip .d{font-family:"Nanum Myeongjo",serif;font-weight:800;font-size:20px;line-height:1}
+#dayChip .ev{font-size:12px;color:var(--gold)}
+#tribChip{flex:1 1 220px;flex-direction:column;align-items:stretch;gap:5px}
+#tribChip .l{display:flex;justify-content:space-between;font-size:12px;gap:8px;color:var(--dim)}
+#tribChip .l b{font-variant-numeric:tabular-nums;white-space:nowrap;color:var(--ink);font-size:13px}
+.meter{height:5px;background:#1c1410;overflow:hidden;position:relative}
+.meter i{position:absolute;inset:0 auto 0 0;background:linear-gradient(90deg,#6e2a10,#d0652a);transition:width .3s}
+.meter.ok i{background:linear-gradient(90deg,#3d5a3d,#8fb78f)}
+#statChip{gap:12px}
+.hearts{display:flex;gap:3px}.hearts svg{width:16px;height:16px}
+.gold{color:var(--gold);font-weight:700;font-variant-numeric:tabular-nums;white-space:nowrap}
+#timer{font-weight:700;font-variant-numeric:tabular-nums;min-width:40px;text-align:center}
+#timer.warn{color:#e0573f}
+#relicStrip{position:absolute;left:max(10px,var(--sa-l));bottom:calc(10px + var(--sa-b));display:flex;gap:5px;flex-wrap:wrap;max-width:calc(100vw - var(--sheetW) - 30px)}
+.rel{width:36px;height:36px;border-radius:3px;background:var(--plate);border:1px solid var(--line);display:grid;place-items:center}
+.rel svg{width:22px;height:22px}
+.rel.r2{border-color:rgba(130,170,210,.45)}.rel.r3{border-color:rgba(214,170,90,.7)}
+.tip{position:fixed;z-index:60;max-width:260px;background:#0a0807;border:1px solid var(--line2);border-radius:3px;padding:8px 10px;font-size:13px;pointer-events:none;display:none}
+/* sheet */
+#sheet{position:absolute;top:0;right:0;bottom:0;width:var(--sheetW);background:linear-gradient(90deg,rgba(6,5,4,.86),rgba(9,7,6,.96));border-left:1px solid var(--line);display:flex;flex-direction:column;padding-right:var(--sa-r)}
+#nav{display:flex;border-bottom:1px solid var(--line);flex:none}
+#nav button{flex:1;display:grid;justify-items:center;gap:2px;min-height:54px;padding:6px 2px;font-size:12px;color:var(--dim);position:relative;border-bottom:2px solid transparent}
+#nav button svg{width:21px;height:21px}
+#nav button.on{color:var(--ink);border-bottom-color:var(--ember);background:linear-gradient(transparent,rgba(208,101,42,.08))}
+#nav .badge{position:absolute;top:5px;right:calc(50% - 22px);background:var(--ember);color:#160803;border-radius:8px;font-size:10px;font-weight:700;padding:0 5px;line-height:15px}
+#panel{flex:1;overflow:auto;padding:14px 14px 0;overscroll-behavior:contain}
+#panel h3{margin:0 0 6px;font-size:19px}
+.swhead{display:flex;justify-content:space-between;align-items:flex-end;gap:10px;flex-wrap:wrap}
+.swname{font-family:"Nanum Myeongjo",serif;font-weight:800;font-size:22px;line-height:1.1}
+.lv{color:var(--gold)}
+.val{font-size:19px;font-weight:700;color:var(--gold);font-variant-numeric:tabular-nums}
+.odds{display:flex;height:22px;overflow:hidden;margin:10px 0 4px;font-size:11px;font-weight:700;color:#0c0806;border:1px solid rgba(0,0,0,.6)}
+.odds div{display:grid;place-items:center;transition:flex-basis .25s;white-space:nowrap;overflow:hidden}
+.legend{display:flex;gap:9px;flex-wrap:wrap;font-size:11.5px;color:var(--dim)}
+.legend span::before{content:"";display:inline-block;width:8px;height:8px;margin-right:4px;background:var(--c)}
+#timing{position:relative;height:30px;background:#120d0a;border:1px solid rgba(255,255,255,.08);margin:10px 0 8px;overflow:hidden}
+#timing .good{position:absolute;top:0;bottom:0;background:rgba(207,138,62,.16)}
+#timing .perf{position:absolute;top:0;bottom:0;background:linear-gradient(90deg,rgba(230,194,90,.1),rgba(230,194,90,.5),rgba(230,194,90,.1))}
+#timing .needle{position:absolute;top:0;bottom:0;width:3px;margin-left:-1.5px;background:#f2e8d8;box-shadow:0 0 8px #fff}
+#timing .lbl{position:absolute;right:8px;top:6px;font-size:12px;color:var(--dim)}
+.bars{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:10px;font-size:12px;color:var(--dim)}
+.bar{height:6px;background:#1c1410;overflow:hidden;margin-top:4px}
+.bar i{display:block;height:100%;background:linear-gradient(90deg,#5a1406,#ff7a2a,#ffd890);transition:width .2s}
+.pips{display:flex;gap:2px;margin-top:4px}.pips b{flex:1;height:6px;background:#1c1410}.pips b.on{background:#d8a04a}
+.pips.rush b{background:#ffd27a;animation:pulse .3s infinite alternate}
+@keyframes pulse{to{filter:brightness(1.6)}}
+.stick{position:sticky;bottom:0;background:linear-gradient(transparent,rgba(9,7,6,.97) 18%);padding:12px 0 calc(12px + var(--sa-b));margin-top:6px}
+.acts{display:flex;gap:6px;flex-wrap:wrap}
+.acts .btn{flex:1 1 90px}
+#bStrike{flex:1 1 100%;min-height:58px;font-size:20px;font-family:"Nanum Myeongjo",serif;font-weight:800;letter-spacing:.1em}
+kbd{font:600 10px "IBM Plex Sans KR";padding:1px 4px;border-radius:2px;background:rgba(0,0,0,.4);border:1px solid rgba(255,255,255,.15);margin-left:4px;opacity:.75}
+.touch kbd{display:none}
+.swlist{display:grid;grid-template-columns:repeat(auto-fill,minmax(132px,1fr));gap:6px}
+.sw{background:var(--plate2);border:1px solid rgba(255,255,255,.06);padding:9px;display:grid;gap:3px}
+.sw .t{font-weight:700;display:flex;justify-content:space-between;gap:6px;font-size:14px}
+.sw .t i{font-style:normal;color:var(--gold)}
+.sw .v{font-size:12.5px;color:var(--dim);font-variant-numeric:tabular-nums}
+.sw .r{display:flex;gap:4px;flex-wrap:wrap;margin-top:4px}
+.sw .r .btn{flex:1;min-height:34px;padding:3px 4px;font-size:12px}
+.tierbar{height:2px;background:var(--tc,#888)}
+.shoptabs{margin:8px 0 10px}
+.offer{display:grid;grid-template-columns:40px minmax(0,1fr) auto;gap:10px;align-items:center;background:var(--plate2);border:1px solid rgba(255,255,255,.06);padding:9px;margin-bottom:6px}
+.offer .ic{width:40px;height:40px;background:#0e0b09;display:grid;place-items:center;border:1px solid var(--line)}
+.offer .ic svg{width:24px;height:24px}
+.offer .n{font-weight:700;font-size:14px}.offer .n small{font-weight:500;margin-left:6px;font-size:11px;padding:1px 5px;background:rgba(255,255,255,.06)}
+.offer .d{font-size:12.5px;color:var(--dim)}
+.r2t{color:#9ec0e0}.r3t{color:#d6aa5a}
+.price{white-space:nowrap}
+.empty{padding:18px;text-align:center;color:var(--dim)}
+#float{position:fixed;left:calc((100vw - var(--sheetW)) / 2);top:30%;transform:translate(-50%,-50%);pointer-events:none;z-index:15;text-align:center}
+#float div{font-family:"Nanum Myeongjo",serif;font-weight:800;font-size:clamp(28px,5vw,54px);animation:floatUp 1.2s ease-out forwards;text-shadow:0 0 24px currentColor,0 3px 0 #000;white-space:nowrap;letter-spacing:.04em}
+#float small{display:block;font-family:"IBM Plex Sans KR";font-size:15px;font-weight:600;color:var(--ink);text-shadow:0 2px 4px #000;letter-spacing:0}
+@keyframes floatUp{0%{opacity:0;transform:translateY(16px) scale(.85)}15%{opacity:1;transform:none}70%{opacity:1}100%{opacity:0;transform:translateY(-30px)}}
+#toasts{position:fixed;left:calc((100vw - var(--sheetW)) / 2);transform:translateX(-50%);top:74px;display:grid;gap:5px;z-index:30;pointer-events:none;width:min(420px,calc(100vw - var(--sheetW) - 20px))}
+.toast{background:var(--plate);border:1px solid var(--line);border-left:2px solid var(--ember);padding:7px 11px;font-size:13.5px;animation:tin .25s ease-out}
+.toast.bad{border-left-color:var(--blood)}.toast.good{border-left-color:var(--good)}.toast.curse{border-left-color:#8a5cc0;background:rgba(24,10,30,.94)}
+@keyframes tin{from{opacity:0;transform:translateY(-6px)}}
+#ticker{position:absolute;left:50%;top:74px;transform:translateX(-50%);width:min(320px,40vw);display:grid;gap:3px;pointer-events:none}
+#ticker div{background:rgba(6,4,3,.78);padding:4px 8px;font-size:12px;animation:tin .3s;border-left:2px solid var(--gold)}
+#rivals{position:absolute;left:max(10px,var(--sa-l));top:72px;width:min(240px,34vw);display:none;gap:5px;max-height:calc(100vh - 140px);overflow:auto}
+#rivals.show{display:grid}
+#rivals.hide #rivList,#rivals.hide #emoteBar{display:none!important}
+#bRiv{justify-self:start}
+.riv{background:var(--plate);border:1px solid var(--line);padding:7px 9px;font-size:12px;display:grid;gap:2px;border-left:2px solid var(--tc,var(--gold))}
+.riv.me{background:var(--plate2)}
+.riv.dead{opacity:.45}
+.riv .n{display:flex;justify-content:space-between;gap:6px;font-weight:700;font-size:13px}
+.riv .s{display:flex;justify-content:space-between;gap:6px;color:var(--dim)}
+.riv .bub{background:#e6ddd0;color:#120b08;padding:1px 7px;font-weight:700;justify-self:start;animation:tin .2s}
+.riv .acts2{display:flex;gap:4px;flex-wrap:wrap}.riv .acts2 .btn{min-height:28px;padding:2px 7px;font-size:11px}
+#emoteBar{display:none;gap:4px;flex-wrap:wrap}
+#rivals.show #emoteBar{display:flex}
+#emoteBar .btn{min-height:30px;padding:2px 8px;font-size:12px}
+#flash{position:fixed;inset:0;pointer-events:none;z-index:12;opacity:0;transition:opacity .4s}
+#modal{position:fixed;inset:0;z-index:50;display:none;align-items:center;justify-content:center;background:rgba(3,2,1,.72);padding:14px}
+#modal.show{display:flex}
+#modal .card h2{margin:0 0 6px;font-size:25px}
+.rank{display:grid;gap:5px;margin:12px 0}
+.rank div{display:grid;grid-template-columns:24px minmax(0,1fr) auto;gap:8px;align-items:center;background:var(--plate2);padding:7px 10px;border-left:2px solid var(--tc,var(--gold))}
+.rank b{font-variant-numeric:tabular-nums}
+.code{font-family:"Nanum Myeongjo",serif;font-weight:800;font-size:44px;letter-spacing:.2em;color:#efe3cf;text-align:center;margin:2px 0}
+.slots{display:grid;gap:5px;margin:12px 0}
+.slot{display:flex;justify-content:space-between;align-items:center;gap:8px;background:var(--plate2);padding:8px 12px;min-height:42px;border-left:2px solid var(--tc,rgba(255,255,255,.12))}
+.slot.empty{color:var(--dim)}
+.teams{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.teams h4{margin:0 0 6px}
+/* fight HUD */
+#fhud{position:fixed;inset:0;z-index:11;pointer-events:none;display:none}
+#fhud.show{display:block}
+#boss{position:absolute;top:12px;left:50%;transform:translateX(-50%);width:min(600px,80vw);text-align:center}
+#boss .nm{font-family:"Nanum Myeongjo",serif;font-weight:800;font-size:19px;text-shadow:0 2px 6px #000;letter-spacing:.08em}
+#boss .hp{height:9px;background:#1a0705;border:1px solid rgba(201,166,107,.35);overflow:hidden;margin-top:5px}
+#boss .hp i{display:block;height:100%;background:linear-gradient(90deg,#4a0a04,#b8301a);transition:width .15s}
+#boss .sub{font-size:12px;color:var(--dim);margin-top:3px;text-shadow:0 1px 3px #000}
+#php{position:absolute;left:max(16px,var(--sa-l));top:14px;display:grid;gap:4px}
+#php .hearts svg{width:22px;height:22px}
+#skill{position:absolute;right:max(16px,var(--sa-r));bottom:calc(16px + var(--sa-b));display:grid;grid-template-columns:auto auto;grid-template-rows:auto auto;gap:10px;pointer-events:auto;align-items:end}
+.fbtn{width:66px;height:66px;border-radius:50%;background:rgba(10,7,6,.75);border:1px solid rgba(201,166,107,.45);display:grid;place-items:center;font-weight:700;font-size:12px;position:relative;overflow:hidden;text-align:center;line-height:1.1;touch-action:none}
+#fAtk{width:92px;height:92px;grid-row:1/3;grid-column:2;border-color:#c0653a;font-size:15px}
+.fbtn .cd{position:absolute;inset:0;background:rgba(0,0,0,.65);transform-origin:bottom;transform:scaleY(0)}
+.fbtn span{position:relative}
+#joy{position:absolute;left:max(20px,var(--sa-l));bottom:calc(20px + var(--sa-b));width:132px;height:132px;border-radius:50%;background:radial-gradient(rgba(255,255,255,.05),rgba(255,255,255,.02));border:1px solid rgba(201,166,107,.3);pointer-events:auto;touch-action:none;display:none}
+#joyK{position:absolute;left:50%;top:50%;width:54px;height:54px;margin:-27px 0 0 -27px;border-radius:50%;background:rgba(201,166,107,.25);border:1px solid rgba(201,166,107,.6)}
+.touch #joy{display:block}
+#pad{display:none}
+#ftip{position:absolute;bottom:calc(12px + var(--sa-b));left:50%;transform:translateX(-50%);font-size:12px;color:var(--dim);background:rgba(0,0,0,.5);padding:3px 10px;white-space:nowrap}
+.touch #ftip{display:none}
+#dmgNums{position:fixed;inset:0;pointer-events:none;z-index:12}
+#dmgNums div{position:absolute;font-weight:800;font-size:20px;color:#e6c25a;text-shadow:0 2px 0 #000;animation:dn .8s ease-out forwards;font-variant-numeric:tabular-nums}
+@keyframes dn{to{transform:translateY(-46px);opacity:0}}
+#hurt{position:fixed;inset:0;pointer-events:none;z-index:11;box-shadow:inset 0 0 140px rgba(160,0,0,.85);opacity:0;transition:opacity .3s}
+#load{position:fixed;inset:0;z-index:100;display:grid;place-items:center;align-content:center;gap:14px;background:var(--bg);font-family:"Nanum Myeongjo",serif;font-size:20px;color:var(--gold)}
+#load i{display:block;width:200px;height:2px;background:#1c1410}#load i b{display:block;height:100%;width:0;background:var(--ember);transition:width .2s}
+#rotate{position:fixed;inset:0;z-index:200;display:none;place-items:center;align-content:center;gap:16px;background:#050403;text-align:center;padding:30px}
+#rotate svg{width:72px;height:72px;animation:rot 2s ease-in-out infinite}
+@keyframes rot{50%{transform:rotate(-90deg)}}
+@media (orientation:portrait) and (pointer:coarse){#rotate{display:grid}}
+/* portrait desktop / narrow fallback: bottom sheet */
+body.bottom{--sheetW:0px}
+body.bottom #sheet{top:auto;left:0;height:min(48vh,440px);width:auto;border-left:0;border-top:1px solid var(--line)}
+body.bottom #float,body.bottom #toasts{left:50%}
+/* short landscape phones */
+@media (max-height:500px){
+  :root{--sheetW:clamp(270px,40vw,370px)}
+  #top{top:6px;gap:5px}.chip{padding:5px 8px}#dayChip .d{font-size:16px}#dayChip .ev{font-size:11px}
+  #nav button{min-height:44px;font-size:10.5px;padding:3px 1px}#nav button svg{width:18px;height:18px}
+  #panel{padding:10px 10px 0}#panel h3{font-size:16px}
+  .swname{font-size:18px}.val{font-size:16px}.legend{display:none}.odds{margin:6px 0 2px;height:20px}
+  #timing{height:26px;margin:6px 0}#bStrike{min-height:50px;font-size:18px}
+  .stick{padding:8px 0 calc(8px + var(--sa-b))}
+  .acts .btn{min-height:38px;font-size:13px}
+  #ticker,#toasts{top:52px}
+  #rivals{top:52px;max-height:calc(100vh - 110px)}
+  .rel{width:30px;height:30px}.rel svg{width:18px;height:18px}
+  #boss .nm{font-size:15px}#boss{top:6px}
+  #joy{width:116px;height:116px}
+  .fbtn{width:58px;height:58px}#fAtk{width:80px;height:80px}
+  .card{padding:16px}#title h1{font-size:44px}#title .menu .btn{min-height:42px}
+}
+@media(prefers-reduced-motion:reduce){*{animation-duration:.01s!important;transition:none!important}}
+</style>
+</head>
+<body>
+<div id="load"><span>대장간에 불을 지피는 중…</span><i><b id="loadBar"></b></i></div>
+<div id="rotate"><svg viewBox="0 0 24 24" fill="none" stroke="#c9a66b" stroke-width="1.4"><rect x="7" y="2" width="10" height="20" rx="2"/><path d="M11 18h2"/></svg><div class="h" style="font-size:22px">가로로 돌려 주세요</div><div class="muted small">용세 대장간은 가로 화면으로 즐기는 게임입니다.</div></div>
+<canvas id="c"></canvas>
+<div id="flash"></div><div id="hurt"></div>
+
+<section id="title" class="screen show">
+  <div class="wrap">
+    <h1 class="h">용세 대장간</h1>
+    <div class="sub">EMBER TITHE</div>
+    <p class="tag">용의 굴 앞에 사슬로 묶인 대장장이. 매일 밤 검을 바쳐야 산다. 한 번 더 내려칠 것인가, 여기서 멈출 것인가.</p>
+    <div class="menu">
+      <button class="btn pri" id="bSolo">솔로 계약</button>
+      <button class="btn" id="bCont" hidden>이어하기</button>
+      <button class="btn" id="bMulti">멀티플레이</button>
+      <div class="row">
+        <button class="btn ghost sm" id="bHow">플레이 방법</button>
+        <button class="btn ghost sm" id="bCodex">도감 · 업적</button>
+        <button class="btn ghost sm" id="bSound">소리 켜짐</button>
+        <button class="btn ghost sm" id="bFull">전체화면</button>
+      </div>
+    </div>
+    <label class="f nick">대장장이 이름<input id="nick" maxlength="12" placeholder="이름을 적어 주세요"></label>
+  </div>
+</section>
+
+<section id="soloMenu" class="screen">
+  <div class="card">
+    <h2 class="h" style="margin:0 0 4px">솔로 계약</h2>
+    <p class="muted small" style="margin:0 0 14px">계약 기간 동안 공물을 바치고, 마지막 날 남긴 검으로 용과 싸운다. 공물을 세 번 못 내면 끝.</p>
+    <label class="f">계약 기간</label>
+    <div class="seg" id="soloDays"><button data-v="12">12일</button><button data-v="20" class="on">20일 · 정식</button><button data-v="30">30일</button></div>
+    <div class="row" style="margin-top:16px;justify-content:flex-end"><button class="btn ghost" data-back>뒤로</button><button class="btn pri" id="bSoloGo">계약서에 서명</button></div>
+  </div>
+</section>
+
+<section id="mpMenu" class="screen">
+  <div class="card">
+    <h2 class="h" style="margin:0 0 12px">멀티플레이</h2>
+    <div id="mpWarn" class="toast bad" style="display:none;margin-bottom:12px"></div>
+    <h4 style="margin:0 0 8px">방 만들기</h4>
+    <div class="grid2">
+      <label class="f">대전 방식<div class="seg" id="mpMode"><button data-v="ffa" class="on">개인전</button><button data-v="team">팀전</button></div></label>
+      <label class="f">인원 (한 명당 대장간 하나)<select id="mpMax"><option>2</option><option>3</option><option selected>4</option><option>5</option><option>6</option><option>8</option></select></label>
+      <label class="f">계약 기간<select id="mpDays"><option value="8">8일 · 빠른 판</option><option value="12" selected>12일</option><option value="20">20일</option></select></label>
+      <label class="f">하루 제한시간<select id="mpLen"><option value="60">60초</option><option value="90" selected>90초</option><option value="120">120초</option></select></label>
+    </div>
+    <div class="row" style="margin-top:12px"><button class="btn pri" id="bCreate" style="flex:1">방 만들기</button></div>
+    <hr class="rule">
+    <h4 style="margin:0 0 8px">코드로 들어가기</h4>
+    <div class="row"><input id="joinCode" maxlength="5" placeholder="방 코드 5자리" style="flex:1;text-transform:uppercase;letter-spacing:.2em"><button class="btn" id="bJoin">참가</button></div>
+    <div class="row" style="margin-top:16px;justify-content:flex-end"><button class="btn ghost" data-back>뒤로</button></div>
+  </div>
+</section>
+
+<section id="lobby" class="screen">
+  <div class="card">
+    <div class="muted small" style="text-align:center">방 코드</div>
+    <div class="code" id="lobCode">-----</div>
+    <div class="row" style="justify-content:center"><button class="btn ghost sm" id="bCopy">코드 복사</button><span class="muted small" id="lobInfo"></span></div>
+    <div id="lobSlots"></div>
+    <div class="row" id="lobHost" style="justify-content:space-between">
+      <button class="btn ghost sm" id="bBot">봇 추가</button>
+      <button class="btn ghost sm" id="bBotDel">봇 빼기</button>
+      <button class="btn pri" id="bStart" style="flex:1">시작하기</button>
+    </div>
+    <p class="muted small" id="lobWait" style="text-align:center"></p>
+    <div class="row" style="justify-content:flex-end"><button class="btn ghost" id="bLeave">나가기</button></div>
+  </div>
+</section>
+
+<div id="hud">
+  <div id="top">
+    <div class="chip" id="dayChip"><div><div class="d" id="dayN">1일차</div><div class="ev" id="evName"></div></div></div>
+    <div class="chip" id="tribChip"><div class="l"><span>오늘의 공물</span><b id="tribTxt">0 / 0 G</b></div><div class="meter" id="tribMeter"><i></i></div></div>
+    <div class="chip" id="statChip"><div class="hearts" id="hearts"></div><div class="gold" id="goldTxt">0 G</div><div id="timer" hidden></div></div>
+  </div>
+  <div id="relicStrip" class="pe"></div>
+  <aside id="rivals" class="pe"><button class="btn ghost sm" id="bRiv">라이벌 접기</button><div id="emoteBar"></div><div id="rivList" style="display:grid;gap:5px"></div></aside>
+  <div id="ticker"></div>
+  <div id="sheet" class="pe">
+    <nav id="nav">
+      <button data-st="furnace"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 3c2 3 5 5 5 9a5 5 0 0 1-10 0c0-2 1-3 2-4 0 2 1 3 2 3 0-3-1-5 1-8z"/></svg>화로</button>
+      <button data-st="anvil" class="on"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 8h13l5-2v3h-4l-2 3h-6l-2-3H3z"/><path d="M9 12v4h6v-4M7 19h10l-2-3H9z"/></svg>모루</button>
+      <button data-st="rack"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M14 3l7 7-9 9-3 1 1-3 9-9M5 15l4 4M3 21l3-3"/></svg>거치대</button>
+      <button data-st="tribute"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M6 15a6 6 0 0 1 12 0v2H6zM12 6v3M4 19h16"/></svg>공물대</button>
+      <button data-st="shop"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 3c-4 0-6 3-6 7v11h12V10c0-4-2-7-6-7z"/><path d="M10 10h.01M14 10h.01"/></svg>상인</button>
+    </nav>
+    <div id="panel"></div>
+  </div>
+</div>
+
+<div id="fhud">
+  <div id="boss"><div class="nm">재비늘 이그나르</div><div class="hp"><i id="bossHp"></i></div><div class="sub" id="bossSub"></div></div>
+  <div id="ftip">A·D 회전 · W·S 거리 · 클릭/J 공격 · Q 스킬 · Space 회피</div>
+  <div id="php"><div class="hearts" id="fHearts"></div><div class="small" id="fSword"></div></div>
+  <div id="pad"></div>
+  <div id="joy"><div id="joyK"></div></div>
+  <div id="skill"><button class="fbtn" id="fSkill"><div class="cd"></div><span id="fSkillN">스킬</span></button><button class="fbtn" id="fAtk"><div class="cd"></div><span>공격</span></button><button class="fbtn" id="fDodge"><div class="cd"></div><span>회피</span></button></div>
+</div>
+<div id="dmgNums"></div>
+<div id="float"></div>
+<div id="toasts"></div>
+<div class="tip" id="tip"></div>
+<div id="modal"><div class="card" id="modalCard"></div></div>
+
+<script src="lib/three.min.js"></script>
+<script src="lib/SimplexNoise.js"></script>
+<script src="lib/CopyShader.js"></script>
+<script src="lib/LuminosityHighPassShader.js"></script>
+<script src="lib/SSAOShader.js"></script>
+<script src="lib/FXAAShader.js"></script>
+<script src="lib/EffectComposer.js"></script>
+<script src="lib/RenderPass.js"></script>
+<script src="lib/ShaderPass.js"></script>
+<script src="lib/UnrealBloomPass.js"></script>
+<script src="lib/SSAOPass.js"></script>
+<script src="js/core.js"></script>
+<script src="js/tex.js"></script>
+<script src="js/models.js"></script>
+<script src="js/forge.js"></script>
+<script src="js/fight.js"></script>
+<script src="lib/peerjs.min.js"></script>
+<script src="js/p2p.js"></script>
+<script src="js/net.js"></script>
+<script src="js/game.js"></script>
+<script src="js/main.js"></script>
+</body>
+</html>
