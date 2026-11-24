@@ -14,12 +14,24 @@
     title: { pos: V(3.3, 2.3, 3.0), look: V(-.6, 1.4, -3.0) }
   };
   const ANV_HIT = V(.08, 0, 0);
+  F.SPOTS = {
+    anvil: { c: V(0, 0, 0), r: 1.9, stand: V(.02, 0, 1.05), look: V(0, .95, -.05) },
+    furnace: { c: V(-2.95, 0, -.45), r: 2.3, stand: V(-1.55, 0, -.3), look: V(-2.9, 1.0, -.45) },
+    rack: { c: V(6.35, 0, .3), r: 2.4, stand: V(4.55, 0, .3), look: V(6.35, 1.6, .3) },
+    tribute: { c: V(2.75, 0, -2.6), r: 2.2, stand: V(2.75, 0, -1.3), look: V(2.75, 1.0, -2.6) },
+    shop: { c: V(-4.1, 0, 3.0), r: 2.5, stand: V(-2.75, 0, 2.05), look: V(-4.2, 1.2, 3.3) },
+    relics: { c: V(-1.2, 0, 4.15), r: 2.2, stand: V(-1.2, 0, 2.75), look: V(-1.2, 1.35, 4.2) }
+  };
+  F.P = { x: .02, z: 1.05, yaw: 0, pitch: -.35, bob: 0, stepAcc: 0, vx: 0, vz: 0 };
+  F.input = { f: 0, b: 0, l: 0, r: 0, run: 0, jx: 0, jy: 0 };
+  F.mode = 'title';
+  const COL = { circles: [[0, 0, .55], [-2.25, 1.35, .45], [-4.4, 3.4, .6], [-3.9, 2.8, .75], [5.2, 2.6, .5], [-3.9, 1.0, .6], [-2.8, .8, .5], [3.95, -2.6, .3]], boxes: [[-3.5, -2.4, -1.25, .35], [1.67, 3.83, -3.06, -2.14], [2.0, 4.4, 3.1, 3.9], [-2.4, 0, 3.85, 4.5], [-4.6, 4.6, -3.6, -3.2]], bounds: [-6.15, 5.95, -3.05, 4.15] };
 
   F.init = function (renderer, hi) {
     const scene = F.scene = new THREE.Scene();
     scene.background = new THREE.Color(0x030202);
     scene.fog = new THREE.FogExp2(0x070403, .045);
-    const cam = F.cam = new THREE.PerspectiveCamera(50, 1, .03, 80);
+    const cam = F.cam = new THREE.PerspectiveCamera(50, 1, .03, 80); cam.rotation.order = 'YXZ'; scene.add(cam);
     F.camPos = F.STATIONS.title.pos.clone(); F.camLook = F.STATIONS.title.look.clone(); F.camPosT = F.camPos.clone(); F.camLookT = F.camLook.clone(); F.shake = 0; F.sheet = 0;
     F.clickables = []; F.hi = hi;
     const click = (obj, action) => obj.traverse(o => { if (o.isMesh) { o.userData.action = action; F.clickables.push(o); } });
@@ -90,10 +102,14 @@
     F.ds = { fwd: 0, tfwd: 0, mouth: 0, tmouth: 0, roarT: 0 };
     // ---- anvil, hammer ----
     const anvil = F.anvil = M.makeAnvil(); scene.add(anvil); F.anvilTop = anvil.userData.topY; click(anvil, 'strike');
-    const piv = F.hPivot = new THREE.Group(); piv.position.set(.56, F.anvilTop + .29, -.36); piv.rotation.y = Math.atan2(.48, -.36); scene.add(piv);
-    const arm = F.hArm = new THREE.Group(); piv.add(arm);
-    const hammer = F.hammer = M.makeHammer(); const qb = new THREE.Matrix4().makeBasis(V(0, -1, 0), V(0, 0, -1), V(1, 0, 0)); hammer.quaternion.setFromRotationMatrix(qb); hammer.position.set(0, 0, -.64); arm.add(hammer);
-    F.hammerAnim = 0; arm.rotation.x = .3;
+    // first-person view model: gloved hand holding the hammer
+    const vm = F.vm = new THREE.Group(); cam.add(vm); vm.position.set(.13, -.25, -.56); vm.rotation.set(0, -.2, -.38);
+    const vmArm = F.vmArm = new THREE.Group(); vm.add(vmArm);
+    const hammer = F.hammer = M.makeHammer(); hammer.rotation.set(0, Math.PI / 2, 0); hammer.position.set(0, .22, -.02); hammer.scale.setScalar(.72); vmArm.add(hammer);
+    const glove = M.makeGlove(); glove.position.set(0, -.16, -.03); glove.scale.setScalar(.85); vmArm.add(glove);
+    hammer.traverse(o => { o.castShadow = false; }); glove.traverse(o => { o.castShadow = false; });
+    const vmL = new THREE.PointLight(0xffb070, .35, 1.2, 2); vmL.position.set(-.2, .2, .2); vm.add(vmL);
+    F.hammerAnim = 0;
     // ---- furnace ----
     const fur = F.furnace = M.makeFurnace(); fur.position.set(-2.95, 0, -.45); fur.rotation.y = Math.PI / 2; scene.add(fur); click(fur, 'heat');
     // quench barrel
@@ -122,8 +138,9 @@
     const rack = F.rack = M.makeRack(10); rack.position.set(6.35, 0, .3); scene.add(rack); click(rack, 'rackview');
     // ---- merchant + pedestal ----
     const mer = F.merchant = M.makeMerchant(); mer.position.set(-4.4, 0, 3.4); mer.rotation.y = Math.PI * .78; scene.add(mer); click(mer, 'shop');
-    const alt = F.altar = M.makeAltar(); alt.position.set(-5.4, 0, 1.6); scene.add(alt); click(alt, 'shop');
-    F.altarIcons = new THREE.Group(); F.altarIcons.position.set(-5.4, 1.36, 1.6); scene.add(F.altarIcons);
+    F.altarIcons = new THREE.Group(); F.altarIcons.position.set(0, .93, .78); mer.add(F.altarIcons);
+    const cab = F.cabinet = M.makeCabinet(); cab.position.set(-1.2, 0, 4.42); cab.rotation.y = Math.PI; scene.add(cab); click(cab, 'relics');
+    F.relicSlots = cab.userData.slots;
     // ---- torches ----
     F.torches = [];
     [[6.4, 2.7, -2.2, -1], [-6.4, 2.7, 2.8, 1], [6.4, 2.7, 3.2, -1]].forEach(([x, y, z, s]) => {
@@ -147,6 +164,18 @@
     return scene;
   };
   F.setStation = function (name, instant) { const s = F.STATIONS[name]; if (!s) return; F.station = name; F.camPosT.copy(s.pos); F.camLookT.copy(s.look); if (instant) { F.camPos.copy(s.pos); F.camLook.copy(s.look); } };
+  F.enterPlay = function () { F.mode = 'play'; F.station = 'play'; const P = F.P; P.x = .02; P.z = 1.15; P.yaw = 0; P.pitch = -.42; F.walk = null; F.vm.visible = true; };
+  F.enterTitle = function () { F.mode = 'title'; F.setStation('title'); F.vm.visible = false; F.walk = null; };
+  F.look = function (dx, dy) { const P = F.P; P.yaw -= dx; P.pitch = U.clamp(P.pitch - dy, -1.35, 1.2); if (dx || dy) F.walkLook = false; };
+  F.dist = st => { const sp = F.SPOTS[st]; return sp ? Math.hypot(F.P.x - sp.c.x, F.P.z - sp.c.z) : 99; };
+  F.near = st => F.mode !== 'play' || F.dist(st) < F.SPOTS[st].r;
+  F.nearest = function () { if (F.mode !== 'play') return null; let best = null, bd = 99; for (const k in F.SPOTS) { const d = F.dist(k); if (d < F.SPOTS[k].r && d < bd) { bd = d; best = k; } } return best === 'furnace' ? 'anvil' : best; };
+  F.walkTo = function (st) { const sp = F.SPOTS[st]; if (!sp || F.mode !== 'play') return; F.walk = { to: sp.stand.clone(), look: sp.look.clone(), st }; F.walkLook = true; };
+  F.relicIcons = [];
+  F.syncRelics = function (list) {
+    F.relicIcons.forEach(o => o.parent && o.parent.remove(o)); F.relicIcons = [];
+    (F.relicSlots || []).forEach((slot, i) => { const id = list[i]; slot.userData.label.material.map = M.labelTex(id ? ET.RELIC[id].name : '— 비어 있음 —', id ? ET.RELIC[id].r : 0); slot.userData.label.material.needsUpdate = true; slot.userData.glow.intensity = id ? .55 : .08; if (!id) return; const ic = M.makeRelicIcon(ET.RELIC[id].tag); ic.position.y = .2; ic.scale.setScalar(1.25); M.lin(ic); slot.add(ic); F.relicIcons.push(ic); });
+  };
   F.resize = function (w, h, sheetW) {
     F.W = w; F.H = h; F.sheet = sheetW || 0;
     const s = F.sheet / w, fullW = w * (1 + s);
@@ -185,7 +214,46 @@
   }
   F.syncRack = function (rack) { syncGroup(F.rackMeshes, rack, (m, i) => { const p = M.rackSlotPos(i); m.quaternion.copy(Q_RACK); m.position.set(F.rack.position.x + p.x, p.y, F.rack.position.z + p.z); }, 'rack'); };
   F.syncCounter = function (counter) { syncGroup(F.counterMeshes, counter, (m, i, n) => { const sp = Math.min(.09, .48 / Math.max(1, n)); m.quaternion.copy(Q_TRAY); m.position.set(F.counter.position.x - .45, F.counter.userData.trayY + .008 + i * .002, F.counter.position.z - (n - 1) * sp / 2 + i * sp); m.userData.fly = 0; }, 'counter'); };
-  F.syncAltar = function (offers) { while (F.altarIcons.children.length) F.altarIcons.remove(F.altarIcons.children[0]); (offers || []).forEach((r, i) => { if (!r || r.sold) return; const ic = M.makeRelicIcon(ET.RELIC[r.id].tag); ic.position.set((i - 1) * .26, .08, 0); ic.scale.setScalar(1.3); F.altarIcons.add(ic); }); };
+  F.syncAltar = function (offers) { while (F.altarIcons.children.length) F.altarIcons.remove(F.altarIcons.children[0]); (offers || []).forEach((r, i) => { if (!r || r.sold) return; const ic = M.makeRelicIcon(ET.RELIC[r.id].tag); ic.position.set((i - 1) * .36, .06, 0); ic.scale.setScalar(1.1); M.lin(ic); F.altarIcons.add(ic); }); };
+  F.goldenFx = function (on) { F.golden = on; if (F.anvilSword) { const bm = F.anvilSword.userData.bladeMat; if (on) { bm.userData.prevEm = bm.emissive.clone(); bm.emissive.set(0x7a5010); } else if (bm.userData.prevEm) { bm.emissive.copy(bm.userData.prevEm); } } };
+  F.evolveFx = function () { F.shake = .08; F.flashLight = 2.4; const top = V(0, F.anvilTop + .05, 0); for (let i = 0; i < 90; i++) { const a = i / 90 * Math.PI * 2; F.gold.emit(top, V(Math.cos(a) * 2.6, .4 + Math.random() * 1.5, Math.sin(a) * 2.6), 1, .05, 0xfff0c0, 0, .94); } for (let i = 0; i < 40; i++) F.flameP.emit(top, V((Math.random() - .5) * .6, 1.5 + Math.random() * 2, (Math.random() - .5) * .6), .9, .12, 0xffc060, -.6, .96); };
+  // ---- first-person movement ----
+  function collide(P) {
+    const pr = .3, b = COL.bounds;
+    P.x = U.clamp(P.x, b[0], b[1]); P.z = U.clamp(P.z, b[2], b[3]);
+    for (const [cx, cz, r] of COL.circles) { const dx = P.x - cx, dz = P.z - cz, d = Math.hypot(dx, dz), m = r + pr; if (d < m && d > 1e-5) { P.x = cx + dx / d * m; P.z = cz + dz / d * m; } }
+    for (const [x0, x1, z0, z1] of COL.boxes) { const qx = U.clamp(P.x, x0, x1), qz = U.clamp(P.z, z0, z1), dx = P.x - qx, dz = P.z - qz, d = Math.hypot(dx, dz); if (d < pr) { if (d > 1e-5) { P.x = qx + dx / d * pr; P.z = qz + dz / d * pr; } else { const opts = [[x0 - pr - P.x, 0], [x1 + pr - P.x, 0], [0, z0 - pr - P.z], [0, z1 + pr - P.z]].sort((a, c) => Math.abs(a[0] + a[1]) - Math.abs(c[0] + c[1])); P.x += opts[0][0]; P.z += opts[0][1]; } } }
+  }
+  F.movePlayer = function (dt) {
+    const P = F.P, I = F.input;
+    if (F.turnL || F.turnR) { P.yaw += ((F.turnL || 0) - (F.turnR || 0)) * dt * 2.2; F.walkLook = false; }
+    let mx = (I.r - I.l) + I.jx, mz = (I.f - I.b) - I.jy;
+    const manual = Math.abs(mx) > .05 || Math.abs(mz) > .05;
+    if (manual) F.walk = null;
+    let vx = 0, vz = 0;
+    const sp = I.run ? 4.2 : 2.7;
+    if (F.walk) {
+      const dx = F.walk.to.x - P.x, dz = F.walk.to.z - P.z, d = Math.hypot(dx, dz);
+      if (d < .1) { const st = F.walk.st; F.walk = null; if (st && ET.G.S) { ET.G.lastNear = F.nearest(); ET.G.go(st === 'furnace' ? 'anvil' : st, true); } }
+      else { vx = dx / d * Math.min(sp, d * 4); vz = dz / d * Math.min(sp, d * 4); }
+      if (F.walkLook) { const tgt = (F.walk || {}).look || F.lastLook; }
+    } else if (manual) {
+      const l = Math.hypot(mx, mz); if (l > 1) { mx /= l; mz /= l; }
+      const sy = Math.sin(P.yaw), cy = Math.cos(P.yaw);
+      vx = (-sy * mz + cy * mx) * sp; vz = (-cy * mz - sy * mx) * sp;
+    }
+    P.vx += (vx - P.vx) * Math.min(1, dt * 12); P.vz += (vz - P.vz) * Math.min(1, dt * 12);
+    const ox = P.x, oz = P.z; P.x += P.vx * dt; P.z += P.vz * dt; collide(P);
+    const moved = Math.hypot(P.x - ox, P.z - oz);
+    // turn toward the walk target's look point
+    const lk = F.walk ? F.walk.look : (F.walkLook ? F.lastLook : null);
+    if (F.walk) F.lastLook = F.walk.look;
+    if (lk && F.walkLook) { const dx = lk.x - P.x, dz = lk.z - P.z, ty = Math.atan2(-dx, -dz), tp = Math.atan2(lk.y - 1.62, Math.hypot(dx, dz)); let dy = ty - P.yaw; dy = Math.atan2(Math.sin(dy), Math.cos(dy)); P.yaw += dy * Math.min(1, dt * 5); P.pitch += (tp - P.pitch) * Math.min(1, dt * 5); if (!F.walk && Math.abs(dy) < .01) F.walkLook = false; }
+    // head bob & steps
+    const spd = moved / Math.max(dt, 1e-4); P.bobT = (P.bobT || 0) + spd * dt * 5.5; P.bob = Math.sin(P.bobT) * .025 * Math.min(1, spd / 2.5);
+    P.stepAcc += moved; if (P.stepAcc > .62) { P.stepAcc = 0; ET.Audio.play('step'); }
+    F.cam.position.set(P.x, 1.62 + P.bob, P.z); F.cam.rotation.set(P.pitch, P.yaw, 0);
+  };
 
   // ---- effects ----
   F.strike = function (onImpact) { F.hammerAnim = .001; F.hammerStart = performance.now(); F.onImpact = onImpact; };
@@ -225,22 +293,26 @@
   F.bellRing = function () { F.bellT = 1; };
   // ---- picking ----
   const ray = new THREE.Raycaster(), mv = new THREE.Vector2();
-  F.pick = function (x, y) {
-    mv.set(x / F.W * 2 - 1, -(y / F.H) * 2 + 1); ray.setFromCamera(mv, F.cam);
+  F.pick = function (x, y, maxD) {
+    mv.set(x / F.W * 2 - 1, -(y / F.H) * 2 + 1); ray.setFromCamera(mv, F.cam); ray.far = maxD || 100;
     const hit = ray.intersectObjects(F.clickables.filter(o => inScene(o)), false)[0];
     return hit ? hit.object.userData : null;
   };
+  F.centerX = () => (F.W - (F.sheet || 0)) / 2;
+  F.pickCenter = () => F.pick(F.centerX(), F.H / 2, 3.2);
   function inScene(o) { while (o.parent) o = o.parent; return o === F.scene; }
 
   // ---- update ----
   F.update = function (dt) {
     F.time += dt; const t = F.time;
-    const k = 1 - Math.pow(.002, dt);
-    F.camPos.lerp(F.camPosT, k); F.camLook.lerp(F.camLookT, k);
-    F.cam.position.copy(F.camPos);
-    F.cam.position.y += Math.sin(t * .9) * .004; F.cam.position.x += Math.sin(t * .6) * .004;
+    if (F.mode === 'play') F.movePlayer(dt);
+    else {
+      const k = 1 - Math.pow(.002, dt);
+      F.camPos.lerp(F.camPosT, k); F.camLook.lerp(F.camLookT, k);
+      F.cam.position.copy(F.camPos); F.cam.position.y += Math.sin(t * .9) * .004;
+      F.cam.lookAt(F.camLook);
+    }
     if (F.shake > 0) { F.cam.position.x += (Math.random() - .5) * F.shake; F.cam.position.y += (Math.random() - .5) * F.shake; F.shake *= Math.pow(.01, dt); if (F.shake < .001) F.shake = 0; }
-    F.cam.lookAt(F.camLook);
     // fire & lights
     M.updateFire(t); M.billboard(F.scene, F.cam);
     const fl = 1 + Math.sin(t * 11) * .06 + Math.sin(t * 6.7) * .08 + (Math.random() - .5) * .1;
@@ -271,17 +343,18 @@
     if (Math.random() < .015) for (let i = 0; i < 4; i++) F.smoke.emit(hw.clone().add(V(0, 0, .5)), V((Math.random() - .5) * .2, .25, .3), 2.5, .2, 0x2a2420, -.05, .99, 3);
     // merchant & altar
     F.merchant.position.y = Math.sin(t * 1.2) * .02; F.merchant.userData.light.intensity = 1.5 + Math.sin(t * 7) * .15;
-    F.altar.userData.rune.material.color.setHSL(.06, 1, .4 + Math.sin(t * 2) * .1);
-    F.altarIcons.children.forEach((c, i) => { c.rotation.y = t * .8 + i; c.position.y = .08 + Math.sin(t * 1.6 + i) * .025; });
+    F.altarIcons.children.forEach((c, i) => { c.rotation.y = t * .8 + i; c.position.y = .06 + Math.sin(t * 1.6 + i) * .02; });
+    F.relicIcons.forEach((c, i) => { c.rotation.y = t * .5 + i; c.position.y = .2 + Math.sin(t * 1.2 + i) * .015; });
     // hammer
-    const arm = F.hArm, UP = .3, DOWN = -.47;
+    const arm = F.vmArm, UP = .35, DOWN = -1.05;
     if (F.hammerAnim > 0) {
       const ha = (performance.now() - F.hammerStart) / 1000; F.hammerAnim = Math.max(.001, ha);
-      const down = .1, up = .32;
-      if (ha < down) arm.rotation.x = UP + (DOWN - UP) * U.ease(ha / down);
-      else if (ha < up) { if (F.onImpact) { const f = F.onImpact; F.onImpact = null; f(); } arm.rotation.x = DOWN + (UP - DOWN) * U.ease((ha - down) / (up - down)); }
-      else { F.hammerAnim = 0; arm.rotation.x = UP; }
-    } else arm.rotation.x = UP + Math.sin(t * 1.5) * .02;
+      const down = .09, up = .27;
+      if (ha < down) { arm.rotation.x = UP + (DOWN - UP) * U.ease(ha / down); arm.position.z = -.12 * (ha / down); }
+      else if (ha < up) { if (F.onImpact) { const f = F.onImpact; F.onImpact = null; f(); } const k2 = U.ease((ha - down) / (up - down)); arm.rotation.x = DOWN + (UP - DOWN) * k2; arm.position.z = -.12 * (1 - k2); }
+      else { if (F.onImpact) { const f = F.onImpact; F.onImpact = null; f(); } F.hammerAnim = 0; arm.rotation.x = UP; arm.position.z = 0; }
+    } else { arm.rotation.x = UP + Math.sin(t * 1.5) * .02 + F.P.bob * .4; arm.position.y = Math.sin(F.P.bobT || 0) * .01; }
+    if (F.golden && F.anvilSword && Math.random() < .7) F.gold.emit(V((Math.random() - .5) * .8, F.anvilTop + .05, (Math.random() - .5) * .1), V(0, .5 + Math.random(), 0), .6, .03, 0xffe090, -.2, .97);
     // anvil sword
     if (F.anvilSword) { const u = F.anvilSword.userData; if (u.drop > 0) { u.drop = Math.max(0, u.drop - dt * 4); F.anvilSword.position.y = F.anvilTop + .012 + u.drop * u.drop * .4; } if (u.orb) u.orb.rotation.y = t * 1.2; if (u.rune) u.rune.opacity = (.35 + u.tier * .1) * (.8 + Math.sin(t * 2.5) * .2); }
     for (const id in F.rackMeshes) { const u = F.rackMeshes[id].userData; if (u.orb) u.orb.rotation.y = t; }

@@ -295,31 +295,79 @@
     g.add(M.blob(1.2, 1.2, .8));
     g.userData.rune = rune; return g;
   };
+  M.labelTex = function (text, r) {
+    const key = 'lbl' + text + r; M._lbl = M._lbl || {}; if (M._lbl[key]) return M._lbl[key];
+    const c = document.createElement('canvas'); c.width = 256; c.height = 56; const g = c.getContext('2d');
+    const gr = g.createLinearGradient(0, 0, 0, 56); gr.addColorStop(0, '#5a4628'); gr.addColorStop(1, '#2e2414'); g.fillStyle = gr; g.fillRect(0, 0, 256, 56);
+    g.strokeStyle = 'rgba(255,220,150,.45)'; g.lineWidth = 2; g.strokeRect(4, 4, 248, 48);
+    g.fillStyle = ['#8a7a66', '#e8d6b0', '#b8d4f0', '#ffd27a'][r || 0]; g.font = '600 22px "Nanum Myeongjo", serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(text, 128, 29);
+    const t = new THREE.CanvasTexture(c); t.encoding = THREE.sRGBEncoding; return (M._lbl[key] = t);
+  };
+  M.makeGlove = function () {
+    const g = new THREE.Group(), lm = M.mat.leather;
+    const palm = M.mesh(new THREE.SphereGeometry(.05, 14, 10), lm); palm.scale.set(1.1, 1.25, .9); g.add(palm);
+    for (let i = 0; i < 4; i++) { const f = M.mesh(new THREE.CylinderGeometry(.013, .014, .05, 8), lm); f.rotation.x = Math.PI / 2; f.position.set(-.012, .03 - i * .021, .045); g.add(f); const k = M.mesh(new THREE.SphereGeometry(.014, 8, 6), lm); k.position.set(-.012, .03 - i * .021, .07); g.add(k); }
+    const th = M.mesh(new THREE.CylinderGeometry(.013, .015, .05, 8), lm); th.rotation.set(.4, 0, .9); th.position.set(.035, .03, .03); g.add(th);
+    const cuff = M.mesh(new THREE.CylinderGeometry(.055, .065, .1, 14), M.mat.leather); cuff.position.y = -.09; cuff.rotation.x = .25; g.add(cuff);
+    const sleeve = M.mesh(new THREE.CylinderGeometry(.065, .08, .35, 14), M.mat.cloth); sleeve.position.set(0, -.3, .05); sleeve.rotation.x = .35; g.add(sleeve);
+    return g;
+  };
+  M.makeCabinet = function () {
+    const g = new THREE.Group(), wd = M.mat.woodDark, W = 2.3, H = 2.15, D = .5;
+    const velvet = new THREE.MeshStandardMaterial({ color: 0x2a0608, roughness: 1, normalMap: M.set.leather.normalMap, normalScale: new THREE.Vector2(.4, .4) });
+    const back = M.box(W - .1, H - .3, .03, velvet); back.position.set(0, H / 2 + .1, -D / 2 + .04); g.add(back);
+    [[-W / 2, 0], [W / 2, 0]].forEach(([x]) => { const p = M.box(.1, H, D, wd); p.position.set(x, H / 2, 0); g.add(p); });
+    const top = M.box(W + .16, .1, D + .1, wd); top.position.set(0, H + .02, .02); g.add(top);
+    const crown = M.box(W + .24, .06, D + .16, wd); crown.position.set(0, H + .1, .03); g.add(crown);
+    const base = M.box(W, .3, D, wd); base.position.set(0, .15, 0); g.add(base);
+    [.66, 1.25].forEach(y => { const sh = M.box(W - .1, .04, D - .06, wd); sh.position.set(0, y, 0); g.add(sh); });
+    const glass = new THREE.MeshStandardMaterial({ color: 0x8aa0a8, roughness: .02, metalness: .9, transparent: true, opacity: .14, depthWrite: false });
+    const gl = M.mesh(new THREE.PlaneGeometry(W - .1, H - .3), glass, false, false); gl.position.set(0, H / 2 + .1, D / 2 - .01); gl.renderOrder = 3; g.add(gl);
+    [-W / 6, W / 6].forEach(x => { const m = M.box(.03, H - .3, .03, M.mat.brass); m.position.set(x, H / 2 + .1, D / 2); g.add(m); });
+    const plq = new THREE.Mesh(new THREE.PlaneGeometry(.9, .18), new THREE.MeshStandardMaterial({ map: M.labelTex('유물 전시장', 1), metalness: .6, roughness: .4 })); plq.position.set(0, H - .05, D / 2 + .065); g.add(plq);
+    const slots = [];
+    [[1.68, -1], [1.68, 0], [1.68, 1], [.69, -1], [.69, 0], [.69, 1]].forEach(([y, c]) => {
+      const sl = new THREE.Group(); sl.position.set(c * .72, y, .02); g.add(sl);
+      const ped = M.lathe([[0, 0], [.11, 0], [.11, .02], [.07, .05], [.05, .1], [.08, .12], [.08, .14], [0, .14]], M.mat.brass, 20); sl.add(ped);
+      const lb = new THREE.Mesh(new THREE.PlaneGeometry(.44, .095), new THREE.MeshStandardMaterial({ map: M.labelTex('— 비어 있음 —', 0), metalness: .5, roughness: .45 })); lb.position.set(0, -.03, .2); lb.rotation.x = -.5; sl.add(lb);
+      const gl2 = new THREE.PointLight(0xffd8a0, .1, .9, 2); gl2.position.set(0, .5, .12); sl.add(gl2);
+      sl.userData.label = lb; sl.userData.glow = gl2; slots.push(sl);
+    });
+    g.add(M.blob(2.8, 1.1, .7)); g.userData.slots = slots; return g;
+  };
   M.makeRelicIcon = function (tag) {
-    const g = new THREE.Group(); let m;
-    const gem = new THREE.MeshStandardMaterial({ color: 0x8a1010, emissive: 0x500808, metalness: .2, roughness: .08 });
+    const g = new THREE.Group();
+    const gold = M.mat.gold, brass = M.mat.brass, iron = M.mat.iron, ivory = M.mat.ivory, leather = M.mat.leather, wood = M.mat.wood;
+    const gem = (c, e) => new THREE.MeshStandardMaterial({ color: c, emissive: e || c, emissiveIntensity: .35, roughness: .05, metalness: .1, transparent: true, opacity: .92 });
+    const add = (m, x, y, z) => { m.position.set(x || 0, y || 0, z || 0); g.add(m); return m; };
     switch (tag) {
-      case 'stone': m = M.box(.18, .045, .06, new THREE.MeshStandardMaterial({ color: 0x6a2a22, roughness: .7, normalMap: M.set.ashlar.normalMap })); break;
-      case 'shoe': m = M.mesh(new THREE.TorusGeometry(.075, .018, 8, 24, Math.PI * 1.35), M.mat.iron); m.rotation.z = -Math.PI * .17 - Math.PI / 2; break;
-      case 'heart': m = M.mesh(new THREE.OctahedronGeometry(.08, 1), gem); m.scale.y = 1.25; break;
-      case 'tear': m = M.mesh(new THREE.SphereGeometry(.06, 16, 12), new THREE.MeshStandardMaterial({ color: 0x6fb8d8, emissive: 0x0a2a3a, roughness: .02, transparent: true, opacity: .85 })); m.scale.y = 1.4; break;
-      case 'dice': m = M.box(.1, .1, .1, M.mat.ivory); m.rotation.set(.6, .6, 0); break;
-      case 'star': m = M.mesh(new THREE.IcosahedronGeometry(.07, 0), new THREE.MeshStandardMaterial({ color: 0x8890a0, metalness: 1, roughness: .2, normalMap: M.set.iron.normalMap })); break;
-      case 'bell': m = M.lathe([[.01, .12], [.03, .11], [.06, .03], [.07, 0], [0, 0]], M.mat.brass, 16); break;
-      case 'anvil': m = M.box(.15, .06, .06, M.mat.iron); break;
-      case 'feather': m = M.mesh(M.loft([V(0, -.1, 0), V(.02, 0, 0), V(0, .12, 0)], [[.004, .004], [.035, .006], [.002, .002]], { seg: 6, rings: 10, up: V(0, 0, 1) }), new THREE.MeshStandardMaterial({ color: 0x8a3010, emissive: 0x401000 })); break;
-      case 'pot': m = M.lathe([[0, 0], [.07, .01], [.08, .06], [.06, .1], [.065, .11], [0, .11]], M.mat.ironDark, 16); break;
-      case 'scale': m = M.mesh(new THREE.TorusGeometry(.06, .008, 6, 24), M.mat.brass); break;
-      case 'mirror': m = M.mesh(new THREE.CircleGeometry(.07, 24), new THREE.MeshStandardMaterial({ color: 0xffffff, metalness: 1, roughness: .02, side: THREE.DoubleSide })); break;
-      case 'shield': m = M.mesh(new THREE.CylinderGeometry(.08, .055, .015, 6), M.mat.iron); m.rotation.x = Math.PI / 2; break;
-      case 'cloak': m = M.mesh(new THREE.ConeGeometry(.07, .18, 10, 1, true), new THREE.MeshStandardMaterial({ color: 0x3a0a0a, roughness: .8, side: THREE.DoubleSide, normalMap: M.set.scales.normalMap })); break;
-      case 'glove': m = M.box(.08, .12, .035, M.mat.leather); break;
-      case 'bellows': m = M.mesh(new THREE.CylinderGeometry(.025, .08, .13, 3), M.mat.leather); m.rotation.z = Math.PI / 2; break;
-      case 'tooth': m = M.mesh(new THREE.ConeGeometry(.03, .12, 8), M.mat.gold); m.rotation.x = Math.PI; break;
-      case 'seal': m = M.mesh(new THREE.CylinderGeometry(.06, .06, .025, 24), new THREE.MeshStandardMaterial({ color: 0x5a0e0e, roughness: .45 })); m.rotation.x = Math.PI / 2; break;
-      default: m = M.mesh(new THREE.TorusKnotGeometry(.045, .014, 48, 6), M.mat.brass);
+      case 'glove': { const pm = add(M.mesh(new THREE.SphereGeometry(.045, 14, 10), leather)); pm.scale.set(1, 1.3, .55); for (let i = 0; i < 4; i++) { const f = add(M.mesh(new THREE.CylinderGeometry(.009, .01, .07, 8), leather), -.03 + i * .02, .085 + (i === 1 || i === 2 ? .008 : 0), 0); } add(M.mesh(new THREE.CylinderGeometry(.01, .011, .055, 8), leather), .05, .02, 0).rotation.z = -.9; add(M.mesh(new THREE.CylinderGeometry(.05, .055, .05, 14), M.mat.cloth), 0, -.07, 0); break; }
+      case 'stone': { const st = add(M.box(.16, .045, .055, new THREE.MeshStandardMaterial({ color: 0x5a1a14, roughness: .55, normalMap: M.set.ashlar.normalMap }), 2)); st.rotation.y = .3; add(M.box(.05, .05, .06, leather), .03, 0, 0).rotation.y = .3; break; }
+      case 'bellows': { [1, -1].forEach(sg => { const b = add(M.mesh(new THREE.CylinderGeometry(.07, .07, .008, 3), wood), 0, sg * .025, 0); b.scale.z = .55; }); add(M.mesh(new THREE.CylinderGeometry(.06, .06, .04, 3, 1, true), leather)).scale.z = .5; add(M.mesh(new THREE.CylinderGeometry(.008, .014, .07, 8), brass), .07, 0, 0).rotation.z = Math.PI / 2; g.rotation.x = .3; break; }
+      case 'tooth': { const t = add(M.mesh(M.loft([V(0, .05, 0), V(.005, -.01, 0), V(-.005, -.06, 0)], [.022, .016, .002], { seg: 10, rings: 10, up: V(0, 0, 1) }), gold)); for (let i = 0; i < 7; i++) { const l = add(M.mesh(new THREE.TorusGeometry(.01, .0025, 6, 10), gold), Math.sin(i * .5) * .05, .07 + Math.cos(i * .5) * .02, 0); l.rotation.y = i % 2 ? Math.PI / 2 : 0; } break; }
+      case 'seal': { add(M.lathe([[0, 0], [.03, 0], [.032, .01], [.02, .03], [.016, .07], [.028, .1], [0, .11]], wood, 16), 0, .02, 0); add(M.mesh(new THREE.CylinderGeometry(.035, .035, .02, 20), brass), 0, .01, 0); add(M.mesh(new THREE.CylinderGeometry(.05, .052, .008, 20), new THREE.MeshStandardMaterial({ color: 0x6a0a0a, roughness: .35 })), .07, -.005, .02); break; }
+      case 'cloak': { const cg = new THREE.ConeGeometry(.07, .16, 24, 4, true); const cp = cg.attributes.position; for (let i = 0; i < cp.count; i++) { const x = cp.getX(i), z = cp.getZ(i), a = Math.atan2(z, x), k = 1 + Math.sin(a * 7) * .12 * (.5 - cp.getY(i) / .16); cp.setX(i, x * k); cp.setZ(i, z * k); } cg.computeVertexNormals(); add(M.mesh(cg, new THREE.MeshStandardMaterial({ color: 0x3a0c0a, roughness: .7, side: THREE.DoubleSide, normalMap: M.set.scales.normalMap }))); add(M.mesh(new THREE.TorusGeometry(.012, .004, 6, 12), gold), 0, .065, .02); break; }
+      case 'shoe': { const sh = add(M.mesh(new THREE.TorusGeometry(.06, .014, 10, 28, Math.PI * 1.35), iron)); sh.rotation.z = -Math.PI * .17 + Math.PI / 2; for (let i = 0; i < 6; i++) { const a = -Math.PI * .17 + Math.PI / 2 + (i + .5) / 6 * Math.PI * 1.35; add(M.mesh(new THREE.SphereGeometry(.004, 6, 4), M.mat.black), Math.cos(a) * .06, Math.sin(a) * .06, .013); } break; }
+      case 'heart': { const m = gem(0x8a0810, 0x600408); [-1, 1].forEach(sg => add(M.mesh(new THREE.SphereGeometry(.035, 16, 12), m), sg * .025, .02, 0)); const c = add(M.mesh(new THREE.ConeGeometry(.058, .07, 16), m), 0, -.03, 0); c.rotation.z = Math.PI; for (let i = 0; i < 3; i++) { const r = add(M.mesh(new THREE.TorusGeometry(.065, .003, 6, 32), gold)); r.rotation.y = i * Math.PI / 3; } break; }
+      case 'tear': { const t = add(M.mesh(new THREE.SphereGeometry(.04, 20, 16), gem(0x5fb0d8, 0x0a3048))); t.scale.y = 1.4; const tp = add(M.mesh(new THREE.ConeGeometry(.028, .05, 16), t.material), 0, .06, 0); for (let i = 0; i < 4; i++) { const cl = add(M.mesh(new THREE.ConeGeometry(.006, .05, 6), M.mat.steelFace), Math.cos(i * 1.57) * .038, -.035, Math.sin(i * 1.57) * .038); cl.rotation.set(Math.sin(i * 1.57) * .6, 0, -Math.cos(i * 1.57) * .6); } add(M.mesh(new THREE.CylinderGeometry(.02, .03, .02, 12), M.mat.steelFace), 0, -.06, 0); break; }
+      case 'dice': { const d = add(M.box(.09, .09, .09, ivory, 3)); d.rotation.set(.5, .6, .1); const pip = new THREE.SphereGeometry(.008, 6, 4), pm = M.mat.black; [[0, 0, .046], [.022, .022, .046], [-.022, -.022, .046], [.046, .02, 0], [.046, -.02, 0], [0, .046, 0]].forEach(([x, y, z]) => d.add(Object.assign(M.mesh(pip, pm, false), { position: V(x, y, z) }))); break; }
+      case 'star': { const pg = add(M.lathe([[0, -.06], [.05, -.055], [.06, -.02], [.05, .03], [.02, .045], [.03, .06], [0, .06]], new THREE.MeshStandardMaterial({ color: 0x2a2040, roughness: .9, normalMap: M.set.leather.normalMap }), 18)); add(M.mesh(new THREE.TorusGeometry(.022, .004, 6, 14), gold), 0, .045, 0).rotation.x = Math.PI / 2; const sm = new THREE.MeshBasicMaterial({ color: 0xcfe0ff, toneMapped: false }); for (let i = 0; i < 6; i++) add(M.mesh(new THREE.OctahedronGeometry(.008, 0), sm, false), (Math.random() - .5) * .08, .07 + Math.random() * .05, (Math.random() - .5) * .08); break; }
+      case 'bell': { add(M.lathe([[.006, .08], [.02, .075], [.045, .02], [.05, 0], [0, 0]], brass, 20)); add(M.mesh(new THREE.CylinderGeometry(.008, .01, .06, 8), wood), 0, .11, 0); break; }
+      case 'anvil': { const sh = new THREE.Shape(); sh.moveTo(-.09, .03); sh.lineTo(.06, .03); sh.lineTo(.06, .0); sh.lineTo(.03, -.01); sh.lineTo(.03, -.04); sh.lineTo(-.03, -.04); sh.lineTo(-.03, -.01); sh.quadraticCurveTo(-.06, .0, -.09, .03); add(M.mesh(new THREE.ExtrudeGeometry(sh, { depth: .04, bevelEnabled: true, bevelSize: .003, bevelThickness: .003, bevelSegments: 1 }), iron), 0, 0, -.02); break; }
+      case 'feather': { const fm = new THREE.MeshStandardMaterial({ color: 0x9a2a08, emissive: 0xc04010, emissiveIntensity: .6, side: THREE.DoubleSide, roughness: .6 }); add(M.mesh(M.loft([V(0, -.09, 0), V(0, .02, 0), V(.01, .1, 0)], [.003, .003, .001], { seg: 6, rings: 10 }), ivory)); [-1, 1].forEach(sg => { const vg = M.loft([V(sg * .002, -.05, 0), V(sg * .02, .0, 0), V(sg * .015, .06, 0), V(.008, .1, 0)], [[.002, .016], [.002, .024], [.002, .018], [.001, .002]], { seg: 6, rings: 14, up: V(0, 0, 1) }); add(M.mesh(vg, fm)); }); g.rotation.z = .4; break; }
+      case 'pot': { add(M.lathe([[0, 0], [.05, .005], [.065, .04], [.06, .08], [.064, .085], [.05, .082], [0, .03]], new THREE.MeshStandardMaterial({ color: 0x3a3a3e, roughness: .6, metalness: .3, side: THREE.DoubleSide }), 20), 0, -.04, 0); add(M.mesh(new THREE.CircleGeometry(.05, 20), new THREE.MeshBasicMaterial({ color: 0xffa030, toneMapped: false })), 0, .035, 0).rotation.x = -Math.PI / 2; add(M.mesh(new THREE.TorusGeometry(.04, .004, 6, 16, Math.PI), iron), 0, .045, 0); break; }
+      case 'scale': { add(M.cyl(.004, .005, .14, brass, 8), 0, 0, 0); add(M.box(.16, .006, .006, brass), 0, .07, 0); [-1, 1].forEach(sg => { add(M.lathe([[0, 0], [.03, .002], [.035, .01], [0, .006]], brass, 16), sg * .075, -.01, 0); for (let k = 0; k < 3; k++) { const c = add(M.cyl(.0012, .0012, .08, brass, 4), sg * .075 + Math.cos(k * 2.1) * .02, .03, Math.sin(k * 2.1) * .02); c.rotation.z = Math.cos(k * 2.1) * -.25; } }); add(M.lathe([[0, 0], [.03, 0], [.02, .01], [0, .012]], brass, 16), 0, -.07, 0); break; }
+      case 'shield': { const sh = new THREE.Shape(); sh.moveTo(-.055, .06); sh.lineTo(.055, .06); sh.lineTo(.055, .0); sh.quadraticCurveTo(.05, -.05, 0, -.08); sh.quadraticCurveTo(-.05, -.05, -.055, 0); sh.lineTo(-.055, .06); add(M.mesh(new THREE.ExtrudeGeometry(sh, { depth: .01, bevelEnabled: true, bevelSize: .006, bevelThickness: .004, bevelSegments: 2 }), iron)); add(M.mesh(new THREE.SphereGeometry(.018, 12, 8), gold), 0, .005, .012).scale.z = .6; break; }
+      case 'mirror': { add(M.mesh(new THREE.CircleGeometry(.05, 28), new THREE.MeshStandardMaterial({ color: 0xffffff, metalness: 1, roughness: .02 })), 0, .03, .003); add(M.mesh(new THREE.TorusGeometry(.053, .008, 8, 32), gold), 0, .03, 0); add(M.cyl(.007, .009, .07, gold, 8), 0, -.055, 0); break; }
+      case 'hammer': { const hd = add(M.box(.12, .055, .055, iron, 4)); hd.position.y = .04; add(M.box(.02, .06, .06, gold, 4), .065, .04, 0); add(M.box(.02, .06, .06, gold, 4), -.065, .04, 0); add(M.cyl(.008, .01, .12, wood, 8), 0, -.03, 0); add(M.mesh(new THREE.PlaneGeometry(.07, .03), new THREE.MeshBasicMaterial({ map: X.runes(), color: 0xff8a3a, transparent: true, blending: THREE.AdditiveBlending, toneMapped: false })), 0, .04, .029); break; }
+      case 'chain': { for (let i = 0; i < 3; i++) { const l = add(M.mesh(new THREE.TorusGeometry(.028, .007, 8, 18), gold), (i - 1) * .04, 0, 0); l.scale.y = 1.4; l.rotation.set(0, i % 2 ? Math.PI / 2 : 0, Math.PI / 2); } break; }
+      case 'hourglass': { const glass = new THREE.MeshStandardMaterial({ color: 0xc0d8e0, transparent: true, opacity: .3, roughness: .02, metalness: .2 }); add(M.lathe([[0, -.06], [.035, -.055], [.032, -.03], [.006, 0], [.032, .03], [.035, .055], [0, .06]], glass, 20)); const sand = new THREE.MeshBasicMaterial({ color: 0xff8030, toneMapped: false }); add(M.mesh(new THREE.ConeGeometry(.026, .03, 16), sand), 0, -.045, 0); add(M.mesh(new THREE.ConeGeometry(.02, .02, 16), sand), 0, .035, 0).rotation.z = Math.PI; [.065, -.065].forEach(y => add(M.cyl(.045, .045, .008, wood, 16), 0, y, 0)); for (let k = 0; k < 3; k++) add(M.cyl(.004, .004, .13, wood, 6), Math.cos(k * 2.1) * .04, 0, Math.sin(k * 2.1) * .04); break; }
+      case 'anvilstone': { add(M.box(.1, .07, .07, new THREE.MeshStandardMaterial({ color: 0x2a2a30, roughness: .5, normalMap: M.set.cave.normalMap }), 3)); const rm = new THREE.MeshBasicMaterial({ map: X.runes(), color: 0x6fd0ff, transparent: true, blending: THREE.AdditiveBlending, toneMapped: false }); [.036, -.036].forEach(z => add(M.mesh(new THREE.PlaneGeometry(.08, .05), rm), 0, 0, z).rotation.y = z < 0 ? Math.PI : 0); break; }
+      case 'crown': { add(M.mesh(new THREE.CylinderGeometry(.05, .05, .03, 24, 1, true), gold)); for (let i = 0; i < 6; i++) { const a = i / 6 * Math.PI * 2; add(M.mesh(new THREE.ConeGeometry(.012, .04, 6), gold), Math.cos(a) * .05, .034, Math.sin(a) * .05); add(M.mesh(new THREE.OctahedronGeometry(.007, 0), gem(i % 2 ? 0xa01010 : 0x1040a0)), Math.cos(a + .52) * .051, 0, Math.sin(a + .52) * .051); } break; }
+      case 'eye': { const e = add(M.mesh(new THREE.SphereGeometry(.035, 20, 16), M.mat.eye), 0, .02, 0); e.rotation.y = Math.PI / 2; for (let i = 0; i < 3; i++) { const a = i / 3 * Math.PI * 2; const c = add(M.mesh(M.loft([V(Math.cos(a) * .03, -.04, Math.sin(a) * .03), V(Math.cos(a) * .045, 0, Math.sin(a) * .045), V(Math.cos(a) * .025, .04, Math.sin(a) * .025)], [.008, .006, .001], { seg: 6, rings: 8 }), M.mat.horn)); } break; }
+      default: add(M.mesh(new THREE.TorusKnotGeometry(.04, .012, 48, 6), brass));
     }
-    g.add(m); return g;
+    return g;
   };
 
   // ---------- swords ----------
@@ -328,7 +376,7 @@
   // realistic blade: lenticular/diamond section with fuller, distal taper
   function bladeGeo(type, tier) {
     const key = type + tier; if (bladeCache[key]) return bladeCache[key];
-    const L = .74 + tier * .045 + (type === 'star' ? .04 : 0), W0 = (type === 'star' ? .062 : type === 'bone' ? .058 : type === 'frost' ? .038 : .048) + tier * .002, T0 = type === 'obsidian' ? .012 : .0075;
+    const L = .74 + tier * .068 + (type === 'star' ? .04 : 0), W0 = ((type === 'star' ? .062 : type === 'bone' ? .058 : type === 'frost' ? .038 : .048) + tier * .0028) * (tier >= 8 ? 1.18 : 1), T0 = (type === 'obsidian' ? .012 : .0075) * (1 + tier * .03);
     const NS = 56, pos = [], uvs = [], idx = [];
     const prof = s => { // returns [halfWidth, thick, centerX]
       let w = W0 * (1 - s * .38); if (s > .82) w *= Math.sqrt(Math.max(0, (1 - s) / .18));
@@ -365,6 +413,7 @@
     const T = ET.TYPES[type] || ET.TYPES.iron, tier = ET.tierOf(lv), fin = lv >= ET.FINAL_LV;
     const g = new THREE.Group(), geo = bladeGeo(type, tier), L = geo.userData.L, W = geo.userData.W;
     const kinds = BLADE_TEX[type]; const kind = type === 'iron' ? (tier === 0 ? 'rust' : tier < 3 ? 'steel' : 'damascus') : kinds[0];
+    const addM = (m, glowMat) => { if (glowMat) m.userData.lin = 1; return m; };
     const set = X.lib.blade(kind), glow = new THREE.Color(T.glow).convertSRGBToLinear();
     const bm = new THREE.MeshStandardMaterial({ map: set.map, normalMap: set.normalMap, roughnessMap: set.roughnessMap, metalnessMap: set.metalnessMap || null, metalness: kind === 'bone' ? 0 : 1, roughness: 1, emissive: new THREE.Color(0, 0, 0), envMapIntensity: 1.3 });
     if (set.emissiveMap) { bm.emissiveMap = set.emissiveMap; }
@@ -394,6 +443,15 @@
     const pom = M.lathe([[0, -.02], [.014, -.02], [.026, -.012], [.028, 0], [.026, .012], [.014, .02], [0, .02]], gm, 24); pom.rotation.x = Math.PI / 2; pom.position.y = -.012 - gl - .022; g.add(pom);
     const peen = M.cyl(.006, .008, .012, gm, 8); peen.position.y = -.012 - gl - .046; g.add(peen);
     if (tier >= 3) { const pmat = new THREE.MeshStandardMaterial({ color: glow, emissive: glow, emissiveIntensity: .7, roughness: .05 }); pmat.userData.lin = 1; const pg = M.mesh(new THREE.SphereGeometry(.011, 12, 8), pmat); pg.position.set(0, -.012 - gl - .022, .016); pg.scale.z = .5; g.add(pg); }
+    // ---- evolution features by stage ----
+    const additive = (op) => { const m = new THREE.MeshBasicMaterial({ color: glow, transparent: true, opacity: op, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false, side: THREE.DoubleSide }); m.userData.lin = 1; return m; };
+    if (tier >= 5) { const rim = new THREE.Mesh(geo, additive(.18 + (tier - 5) * .03)); rim.scale.set(1.12, 1.005, 2.2); g.add(rim); g.userData.rim = rim; }
+    if (tier >= 6) { const cm = new THREE.MeshStandardMaterial({ color: glow, emissive: glow, emissiveIntensity: .8, roughness: .05, metalness: .2, transparent: true, opacity: .9 }); cm.userData.lin = 1; const n = 4 + tier; for (let i = 0; i < n; i++) { const t2 = .12 + i / n * .7; for (const sd of [-1, 1]) { const c = M.mesh(new THREE.OctahedronGeometry(.008 + tier * .0007, 0), cm, false); c.scale.set(1, 2.2, .6); c.position.set(sd * W * (.5 - t2 * .19) * 1.05, t2 * L, 0); c.rotation.z = sd * -.6; g.add(c); } } }
+    if (tier >= 7) { const ring = new THREE.Group(); ring.position.y = L * .5; const tm2 = additive(.55); for (let k = 0; k < 2; k++) { const tr = new THREE.Mesh(new THREE.TorusGeometry(W * (1.6 + k * .5), .0025, 6, 48), tm2); tr.rotation.x = Math.PI / 2 + k * .4; ring.add(tr); } g.add(ring); g.userData.ring = ring; }
+    if (tier >= 8) { const fl = new THREE.Group(); for (let k = 0; k < 2; k++) { const f = M.makeFire(W * 3.4, L * 1.05, .55 + (tier - 8) * .12, T.glow, k * .5 + tier); f.userData.billboard = false; f.rotation.y = k * Math.PI / 2; f.material.uniforms.uTint.value.copy(glow); fl.add(f); } fl.position.y = 0; g.add(fl); }
+    if (tier >= 10) { const sh = new THREE.Mesh(geo, additive(.12)); sh.scale.set(1.5, 1.14, 3); sh.position.y = -.01; g.add(sh); g.userData.shell = sh; }
+    if (tier >= 11) { const wm = new THREE.MeshStandardMaterial({ color: tier >= 12 ? 0xffffff : 0xffd890, metalness: .9, roughness: .15, emissive: glow, emissiveIntensity: .5 }); wm.userData.lin = 1; for (const sd of [-1, 1]) for (let k = 0; k < 4; k++) { const len = .12 + k * .05; const w2 = M.mesh(M.loft([V(sd * gw * .6, .01, 0), V(sd * (gw * .8 + k * .03), len * .5, -.01), V(sd * (gw * .5 + k * .05), len, 0)], [[.012, .003], [.009, .002], [.001, .001]], { seg: 6, rings: 10, up: V(0, 0, 1) }), wm); w2.rotation.z = sd * k * .12; g.add(w2); } }
+    if (tier >= 12) { const halo = new THREE.Mesh(new THREE.TorusGeometry(gw * .9, .004, 8, 64), additive(.8)); halo.position.y = -.05; g.add(halo); g.userData.halo = halo; const pl = new THREE.PointLight(glow, .8, 2.5, 2); pl.position.y = L * .5; g.add(pl); }
     // final form: drifting embers around blade
     if (fin) {
       const orb = new THREE.Group(); const om = new THREE.MeshBasicMaterial({ color: glow, toneMapped: false }); om.userData.lin = 1;

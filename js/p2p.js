@@ -32,6 +32,7 @@
         onPeers(fn) { peerFns.push(fn); setTimeout(() => fn({ peers: last, joined: last, left: [], updated: [] }), 0); return () => { peerFns = peerFns.filter(f => f !== fn); }; },
         peers() { return last; },
         connected() { return alive && (host || (hubConn && hubConn.open)); },
+        hubId() { return host ? myId : (hubConn ? hubConn.peer : null); },
         onDrop(fn) { dropFns.push(fn); },
         emit() { return Promise.resolve(); }, on() { return () => { }; },
         leave() { alive = false; try { peer && peer.destroy(); } catch (e) { } return Promise.resolve(); }

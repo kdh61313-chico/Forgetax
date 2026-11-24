@@ -75,7 +75,7 @@
     FT.skMax = { basic: 7, quake: 8, fireball: 6, frost: 11, storm: 8, skeleton: 15, meteor: 10 }[FT.ab];
     FT.base = ET.dmgOf(o.value);
     while (FT.hand.children.length) FT.hand.remove(FT.hand.children[0]);
-    const sw = M.makeSword(o.sword.type, o.sword.lv); sw.rotation.set(-.35, .25, -.35); sw.scale.setScalar(.85); sw.traverse(c => { if (c.isMesh) { c.castShadow = false; } }); FT.hand.add(sw); FT.sw3 = sw;
+    const sw = M.makeSword(o.sword.type, o.sword.lv); sw.rotation.set(-.35, .25, -.35); sw.scale.setScalar(.85 / Math.max(1, sw.userData.len / .85)); sw.traverse(c => { if (c.isMesh) { c.castShadow = false; } }); FT.hand.add(sw); FT.sw3 = sw;
     FT.D.position.set(0, 0, 0); FT.D.rotation.set(0, 0, 0); M.mat.dragonSkin.color.set(0xffffff);
     $('#fhud').classList.add('show'); $('#fSkillN').textContent = FT.fin ? T.abName : '강타';
     $('#fSword').textContent = T.name + ' +' + o.sword.lv + ' · 기본 피해 ' + FT.base;

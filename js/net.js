@@ -27,7 +27,8 @@
     if (N.r.onDrop) N.r.onDrop(() => { if (!N.r) return; ET.G.toast('방장과의 연결이 끊겼습니다', 'bad'); N.leave(); ET.Main.toTitle(); ET.G.modal('<h2 class="h">연결 끊김</h2><p>방장이 나갔거나 네트워크가 끊겨 방이 닫혔습니다.</p>', [{ t: '확인', cls: 'pri' }]); });
     N.ja = Date.now();
     const p = { v: 1, nick: N.nick(), ja: N.ja, team: null, st: null, out: [], fd: null, em: null };
-    if (cfg) { N.g = { ph: 'lobby', mode: cfg.mode, max: cfg.max, days: cfg.days, len: cfg.len, seed: 0, day: 0, end: 0, fEnd: 0, bots: [], ros: [], ep: 1 }; p.g = N.g; }
+    if (cfg) { N.g = { ph: 'lobby', mode: cfg.mode, max: cfg.max, days: cfg.days, len: cfg.len, seed: 0, day: 0, end: 0, fEnd: 0, bots: [], ros: [], ep: 1, created: Date.now(), now: Date.now() }; p.g = N.g; }
+    N.off = 0;
     await N.r.presence(p);
     N.unsub = N.r.onPeers(ch => { N.peers = ch.peers; N.flow(); });
     clearInterval(N.iv); N.iv = setInterval(() => N.flow(), 400);
@@ -37,7 +38,15 @@
 
   // ---------- helpers ----------
   const viewers = () => N.peers.filter(p => p.kind === 'viewer' && p.presence && typeof p.presence.ja === 'number');
-  N.hostPeer = function () { const v = viewers().slice().sort((a, b) => a.presence.ja - b.presence.ja || (a.peer < b.peer ? -1 : 1)); return v[0] || null; };
+  // host = the P2P hub if there is one; otherwise whoever already carries the game object (oldest), then the earliest joiner
+  N.hostPeer = function () {
+    if (N.r && N.r.hubId) { const h = N.r.hubId(); const p = N.peers.find(x => x.peer === h); if (p) return p; }
+    const v = viewers();
+    const withG = v.filter(p => p.presence.g && typeof p.presence.g === 'object').sort((a, b) => (+a.presence.g.created || 0) - (+b.presence.g.created || 0) || (a.peer < b.peer ? -1 : 1));
+    if (withG.length) return withG[0];
+    return v.slice().sort((a, b) => a.presence.ja - b.presence.ja || (a.peer < b.peer ? -1 : 1))[0] || null;
+  };
+  N.now = () => Date.now() + (N.isHost ? 0 : (N.off || 0));
   N.me = () => N.peers.find(p => p.sameTab);
   N.peerById = id => N.peers.find(p => p.peer === id);
   N.nameOf = function (id) { if (!id) return '누군가'; if (id.startsWith('bot')) { const b = (N.g && N.g.bots || []).find(x => x.id === id); return b ? b.n : '봇'; } const p = N.peerById(id); if (p && p.presence.nick) return String(p.presence.nick).slice(0, 12); const r = N.g && N.g.ros.find(x => x[0] === id); return r ? r[1] : '누군가'; };
@@ -60,7 +69,7 @@
   };
   N.fightHP = function (base) { if (!N.g || N.g.mode !== 'team') return base; const mt = N.myTeam(); const n = N.g.ros.filter(x => x[2] === mt).length; return base * Math.max(1, n); };
   N.teamDmgOthers = function () { if (!N.g || N.g.mode !== 'team') return 0; const mt = N.myTeam(); return N.entries().filter(e => e.team === mt && e.id !== N.myPeer).reduce((a, e) => a + (e.st.dmg || 0), 0); };
-  N.fightTimeLeft = () => N.g && N.g.ph === 'fight' ? (N.g.fEnd - Date.now()) / 1000 : (N.g && N.g.ph === 'end' ? 0 : null);
+  N.fightTimeLeft = () => N.g && N.g.ph === 'fight' ? (N.g.fEnd - N.now()) / 1000 : (N.g && N.g.ph === 'end' ? 0 : null);
 
   // ---------- outgoing ----------
   let lastPush = 0, pushT = null;
@@ -120,7 +129,8 @@
     N.renderTimer();
   };
   function sanitizeG(g) {
-    return { ph: String(g.ph || 'lobby'), mode: g.mode === 'team' ? 'team' : 'ffa', max: U.clamp(g.max | 0, 2, 8), days: U.clamp(g.days | 0, 2, 40), len: U.clamp(g.len | 0, 20, 300), seed: g.seed | 0, day: g.day | 0, end: +g.end || 0, fEnd: +g.fEnd || 0, dayStart: +g.dayStart || 0, bots: Array.isArray(g.bots) ? g.bots.slice(0, 8) : [], ros: Array.isArray(g.ros) ? g.ros.slice(0, 8).map(r => [String(r[0]), String(r[1]).slice(0, 12), r[2] === 'B' ? 'B' : r[2] === 'A' ? 'A' : null, r[3] ? 1 : 0]) : [], ep: g.ep | 0 };
+    if (+g.now) { const o = +g.now - Date.now(); N.off = N.off == null || Math.abs(o - N.off) > 2000 ? o : N.off * .8 + o * .2; }
+    return { created: +g.created || 0, now: +g.now || 0, ph: String(g.ph || 'lobby'), mode: g.mode === 'team' ? 'team' : 'ffa', max: U.clamp(g.max | 0, 2, 8), days: U.clamp(g.days | 0, 2, 40), len: U.clamp(g.len | 0, 20, 300), seed: g.seed | 0, day: g.day | 0, end: +g.end || 0, fEnd: +g.fEnd || 0, dayStart: +g.dayStart || 0, bots: Array.isArray(g.bots) ? g.bots.slice(0, 8) : [], ros: Array.isArray(g.ros) ? g.ros.slice(0, 8).map(r => [String(r[0]), String(r[1]).slice(0, 12), r[2] === 'B' ? 'B' : r[2] === 'A' ? 'A' : null, r[3] ? 1 : 0]) : [], ep: g.ep | 0 };
   }
   N.checkFlow = function () {
     const g = N.g, G = ET.G, S = G.S; if (!g || !N.inGame || !S || S.mode !== 'mp') return;
@@ -163,7 +173,7 @@
       // team dragon defeated → done
       if (now >= g.fEnd || (done && humans.length) || (!humans.length && now > g.fEnd - 100000)) { g.ph = 'end'; g.bots.forEach(b => { b.st.fd = 1; b.st.score = botScore(b); }); }
     }
-    const s = JSON.stringify(g); if (s !== lastG) { lastG = s; setP({ g }); }
+    const s = JSON.stringify(Object.assign({}, g, { now: 0 })); if (s !== lastG || now - (N.lastBeat || 0) > 1500) { lastG = s; N.lastBeat = now; g.now = now; setP({ g }); }
   };
   N.hostStart = function () {
     const g = N.g; if (!N.isHost || g.ph !== 'lobby') return;
@@ -212,7 +222,7 @@
   N.renderTimer = function () {
     const g = N.g, el = $('#timer'); if (!g || !N.inGame) { el.hidden = true; return; }
     el.hidden = false; let s;
-    if (g.ph === 'play') s = Math.max(0, Math.ceil((g.end - Date.now()) / 1000)); else if (g.ph === 'fight') s = Math.max(0, Math.ceil((g.fEnd - Date.now()) / 1000)); else s = 0;
+    if (g.ph === 'play') s = Math.max(0, Math.ceil((g.end - N.now()) / 1000)); else if (g.ph === 'fight') s = Math.max(0, Math.ceil((g.fEnd - N.now()) / 1000)); else s = 0;
     el.textContent = s + '초'; el.classList.toggle('warn', s <= 10 && g.ph !== 'end');
     if (g.ph === 'play' && s <= 10 && s > 0 && N.lastBeep !== s && ET.G.S && ET.G.S.phase === 'forge') { N.lastBeep = s; A.play('click'); }
   };

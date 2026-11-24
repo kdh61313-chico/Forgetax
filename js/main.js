@@ -23,7 +23,7 @@
   const prog = (p, t) => { const b = $('#loadBar'); if (b) b.style.width = (p * 100) + '%'; if (t) { const s = document.querySelector('#load span'); if (s) s.textContent = t; } };
   async function boot() {
     const touch = matchMedia('(pointer: coarse)').matches; Main.touch = touch; if (touch) document.body.classList.add('touch');
-    const hi = !touch && (navigator.hardwareConcurrency || 4) >= 4; Main.hi = hi;
+    const q = U.store.get('quality', 'auto'); const hi = q === 'high' || (q === 'auto' && !touch && (navigator.hardwareConcurrency || 4) >= 4); Main.hi = hi;
     ET.X.size = hi ? 512 : 256; ET.X.big = hi;
     const canvas = $('#c');
     renderer = new THREE.WebGLRenderer({ canvas, antialias: false, powerPreference: 'high-performance' });
@@ -49,7 +49,7 @@
       }
     } catch (e) { console.warn(e); composer = null; }
     resize(); addEventListener('resize', resize); addEventListener('orientationchange', () => setTimeout(resize, 300));
-    F.setStation('title', true);
+    F.setStation('title', true); F.vm.visible = false;
     prog(1); const ld = $('#load'); if (ld) ld.remove();
     if (U.store.get('save', null)) $('#bCont').hidden = false;
     $('#nick').value = U.store.get('nick', '');
@@ -65,7 +65,7 @@
       if (FT.active) { FT.update(dt); draw(FT.scene, FT.cam, now); }
       else {
         if (F.station === 'title') { const t = now / 1000; F.camPosT.set(Math.sin(t * .07) * 1.0 + 3.0, 2.2 + Math.sin(t * .11) * .15, 3.0); }
-        G.tick(dt); F.update(dt); draw(F.scene, F.cam, now);
+        G.tick(dt); F.update(dt); Main.updatePrompt(); draw(F.scene, F.cam, now);
       }
     };
     requestAnimationFrame(loop);
@@ -93,18 +93,19 @@
   // ---------- screens ----------
   Main.show = function (id) { U.$$('.screen').forEach(s => s.classList.toggle('show', s.id === id)); $('#hud').classList.toggle('show', !id); requestAnimationFrame(() => Main.resize && Main.resize()); };
   Main.toTitle = function () {
-    if (FT.active) FT.stop(); G.closeModal(); G.S = null; Main.show('title'); F.setStation('title');
+    if (FT.active) FT.stop(); G.closeModal(); G.S = null; Main.show('title'); F.enterTitle();
     $('#rivals').classList.remove('show'); $('#emoteBar').classList.remove('show'); $('#timer').hidden = true; $('#bCont').hidden = !U.store.get('save', null);
     F.syncRack([]); F.syncCounter([]); F.setAnvilSword(null);
   };
-  function startSolo(days) { A.init(); Main.show(null); G.newRun({ mode: 'solo', days }); }
+  function startSolo(days) { A.init(); Main.show(null); G.newRun({ mode: 'solo', days }); hintOnce(); }
+  function hintOnce() { if (U.store.get('hinted2', 0)) return; U.store.set('hinted2', 1); setTimeout(() => G.toast(Main.touch ? '왼쪽 스틱으로 걷고, 화면을 끌어 둘러보세요. 물건을 탭하면 상호작용' : 'WASD로 걷고 마우스를 끌어 둘러보세요. E나 클릭으로 상호작용, Space 꾹 = 연속 타격'), 2200); }
   Main.startMP = function (g, playing) {
     A.init(); G.closeModal(); Main.show(null);
-    G.newRun({ mode: 'mp', seed: g.seed, days: g.days });
+    G.newRun({ mode: 'mp', seed: g.seed, days: g.days }); hintOnce();
     if (!playing) { G.S.alive = false; G.S.phase = 'dead'; G.render(true); G.toast('이미 시작된 판이라 관전합니다', 'bad'); }
     G.banner('계약 시작', (g.mode === 'team' ? '팀전' : '개인전') + ' · ' + g.days + '일 · 하루 ' + g.len + '초');
   };
-  Main.backToLobby = function () { if (FT.active) FT.stop(); G.closeModal(); G.S = null; F.syncRack([]); F.syncCounter([]); F.setAnvilSword(null); $('#rivals').classList.remove('show'); $('#emoteBar').classList.remove('show'); $('#timer').hidden = true; Main.show('lobby'); F.setStation('title'); };
+  Main.backToLobby = function () { if (FT.active) FT.stop(); G.closeModal(); G.S = null; F.syncRack([]); F.syncCounter([]); F.setAnvilSword(null); $('#rivals').classList.remove('show'); $('#emoteBar').classList.remove('show'); $('#timer').hidden = true; Main.show('lobby'); F.enterTitle(); };
 
   Main.renderLobby = function () {
     if (!N.r || N.inGame) return;
@@ -161,7 +162,7 @@
     click('#bStart', () => N.hostStart());
     click('#bBot', () => N.addBot()); click('#bBotDel', () => N.delBot());
     click('#bSound', () => { A.on = !A.on; U.store.set('mute', !A.on); $('#bSound').textContent = A.on ? '소리 켜짐' : '소리 꺼짐'; A.ambLevel(A.on ? .12 : 0); });
-    click('#bHow', howTo); click('#bCodex', codex);
+    click('#bHow', howTo); click('#bCodex', codex); const bs = $('#bSet'); if (bs) bs.addEventListener('click', () => { A.play('click'); settings(); }); const bs2 = $('#bSet2'); if (bs2) bs2.addEventListener('click', () => { A.play('click'); settings(); });
     click('#bFull', () => { const d = document.documentElement; try { const p = d.requestFullscreen ? d.requestFullscreen() : d.webkitRequestFullscreen && d.webkitRequestFullscreen(); if (p && p.then) p.then(() => { try { screen.orientation.lock('landscape').catch(() => { }); } catch (e) { } }).catch(() => G.toast('이 화면에서는 전체화면을 쓸 수 없어요')); } catch (e) { G.toast('이 화면에서는 전체화면을 쓸 수 없어요'); } });
     click('#bRiv', () => { const r = $('#rivals'); r.classList.toggle('hide'); $('#bRiv').textContent = r.classList.contains('hide') ? '라이벌 보기' : '라이벌 접기'; });
     U.$$('#nav button').forEach(b => b.addEventListener('click', () => { A.play('click'); if (G.S) G.go(b.dataset.st); }));
@@ -187,36 +188,93 @@
       '<h4>유물</h4><div class="swlist">' + ET.RELICS.map(R => '<div class="sw" style="opacity:' + (sr[R.id] ? 1 : .45) + '"><div class="t"><span>' + R.name + '</span><i class="r' + R.r + 't">' + ET.RAR[R.r] + '</i></div><div class="v">' + (sr[R.id] ? R.d : '아직 손에 넣지 못했다') + (R.mp ? ' (멀티 전용)' : '') + '</div></div>').join('') + '</div>', [{ t: '닫기', cls: 'pri' }]);
   }
 
+  const ACT_LABEL = { strike: '모루 · 타격', heat: '화로 · 가열', bell: '종 치기', tribute: '공물대', rack: '이 검을 모루로', rackview: '검 거치대', counter: '공물에서 빼기', shop: '재의 상인', relics: '유물 전시장', dragon: '이그나르' };
+  function interact(hit) {
+    if (!hit || !hit.action || !G.S || G.S.phase === 'dead') return;
+    const a = hit.action, open = st => { G.go(st); if (!F.near(st)) F.walkTo(st); };
+    if (a === 'strike') { if (F.near('anvil')) { G.go('anvil'); G.strike(); } else open('anvil'); }
+    else if (a === 'heat') { if (F.near('anvil') || F.near('furnace')) G.heat(); else open('anvil'); }
+    else if (a === 'bell') { if (F.near('tribute')) G.ringBell(); else open('tribute'); }
+    else if (a === 'tribute') open('tribute');
+    else if (a === 'rack' && hit.id) { G.toAnvil(hit.id); }
+    else if (a === 'rackview') open('rack');
+    else if (a === 'counter' && hit.id) G.toRack(hit.id);
+    else if (a === 'shop') open('shop');
+    else if (a === 'relics') open('relics');
+    else if (a === 'dragon') { F.dragonReact('peek'); A.play('roar', .4); }
+  }
+  Main.interact = interact;
+  let promptT = 0;
+  Main.updatePrompt = function () {
+    const el = $('#prompt'), xh = $('#xh'); if (!el) return;
+    const show = G.S && !FT.active && F.mode === 'play' && $('#hud').classList.contains('show');
+    xh.style.display = show ? 'block' : 'none'; if (!show) { el.style.display = 'none'; return; }
+    const cx = F.centerX(); xh.style.left = cx + 'px'; el.style.left = cx + 'px';
+    if (performance.now() - promptT < 90) return; promptT = performance.now();
+    const hit = F.pickCenter(); const lab = hit && ACT_LABEL[hit.action];
+    if (lab) { el.textContent = (Main.touch ? '탭 · ' : 'E · ') + lab; el.style.display = 'block'; xh.classList.add('on'); } else { el.style.display = 'none'; xh.classList.remove('on'); }
+  };
   function bindInput() {
+    const I = F.input;
+    const setK = (k, v) => { if (k === 'w') I.f = v; else if (k === 's') I.b = v; else if (k === 'a') I.l = v; else if (k === 'd') I.r = v; else if (k === 'shift') I.run = v; else if (k === 'arrowup') I.f = v; else if (k === 'arrowdown') I.b = v; else if (k === 'arrowleft') F.turnL = v; else if (k === 'arrowright') F.turnR = v; };
     addEventListener('keydown', e => {
-      if (e.target.tagName === 'INPUT' || FT.active || !G.S || $('#modal').classList.contains('show')) return;
-      const k = e.key.toLowerCase();
-      if (k === ' ') { e.preventDefault(); G.strike(); }
+      const tg = e.target.tagName; if (tg === 'INPUT' || tg === 'SELECT' || FT.active || !G.S) return;
+      if ($('#modal').classList.contains('show')) return;
+      const k = e.key.toLowerCase(); setK(k, 1);
+      if (k === ' ') { e.preventDefault(); if (!e.repeat) { G.strike(); G.hold = true; } }
+      else if (k === 'e' || k === 'f') interact(F.pickCenter());
       else if (k === 'h') G.heat();
       else if (k === 'r' && G.S.anvil) G.toRack(G.S.anvil.id);
       else if (k === 't' && G.S.anvil) G.toCounter(G.S.anvil.id);
-      else if (k === 'b') G.ringBell();
-      else if ('12345'.includes(k) && k) G.go(['furnace', 'anvil', 'rack', 'tribute', 'shop'][+k - 1]);
+      else if (k === 'b') { if (F.near('tribute')) G.ringBell(); else { G.go('tribute'); F.walkTo('tribute'); } }
+      else if (k === 'g') G.autoTribute();
+      else if ('123456'.includes(k) && k) { const st = ['anvil', 'furnace', 'rack', 'tribute', 'shop', 'relics'][+k - 1]; G.go(st === 'furnace' ? 'anvil' : st); F.walkTo(st); }
+      else if (k === 'escape') { G.hold = false; }
     });
-    const cv = $('#c'); let down = null;
-    cv.addEventListener('pointerdown', e => { A.init(); down = { x: e.clientX, y: e.clientY }; if (FT.active) { FT.attack(); FT.mouseHold = true; } });
+    addEventListener('keyup', e => { const k = e.key.toLowerCase(); setK(k, 0); if (k === ' ') G.hold = false; });
+    addEventListener('blur', () => { for (const k in I) I[k] = 0; F.turnL = F.turnR = 0; G.hold = false; });
+    const cv = $('#c'); let drag = null;
+    cv.addEventListener('contextmenu', e => e.preventDefault());
+    cv.addEventListener('pointerdown', e => {
+      A.init();
+      if (FT.active) { FT.attack(); FT.mouseHold = true; return; }
+      if (!G.S || F.mode !== 'play') return;
+      drag = { id: e.pointerId, x: e.clientX, y: e.clientY, moved: 0 }; try { cv.setPointerCapture(e.pointerId); } catch (er) { }
+    });
+    cv.addEventListener('pointermove', e => {
+      if (drag && e.pointerId === drag.id) { const dx = e.clientX - drag.x, dy = e.clientY - drag.y; drag.x = e.clientX; drag.y = e.clientY; drag.moved += Math.abs(dx) + Math.abs(dy); const sn = .0045 * (G.prefs.sens || 1) * (Main.touch ? 1.25 : 1); F.look(dx * sn, dy * sn * (G.prefs.invert ? -1 : 1)); }
+      else if (!Main.touch && G.S && !FT.active && F.mode === 'play') { const hit = F.pick(e.clientX, e.clientY, 4); cv.style.cursor = hit && hit.action ? 'pointer' : 'grab'; }
+    });
+    const end = e => { FT.mouseHold = false; if (!drag || e.pointerId !== drag.id) return; const d = drag; drag = null; if (d.moved < 10 && e.type === 'pointerup') interact(F.pick(e.clientX, e.clientY, 4.5)); };
+    cv.addEventListener('pointerup', end); cv.addEventListener('pointercancel', end);
     addEventListener('pointerup', () => { FT.mouseHold = false; });
-    cv.addEventListener('pointerup', e => {
-      if (FT.active || !G.S || !down || Math.hypot(e.clientX - down.x, e.clientY - down.y) > 8) return;
-      const hit = F.pick(e.clientX, e.clientY); if (!hit || !hit.action) return;
-      const a = hit.action;
-      if (a === 'strike') { if (G.station !== 'anvil') G.go('anvil'); else G.strike(); }
-      else if (a === 'heat') { if (G.station !== 'furnace') G.go('furnace'); else G.heat(); }
-      else if (a === 'bell') { if (G.station !== 'tribute') G.go('tribute'); else G.ringBell(); }
-      else if (a === 'tribute') G.go('tribute');
-      else if (a === 'rack' && hit.id) { if (G.station === 'rack') G.toAnvil(hit.id); else G.go('rack'); }
-      else if (a === 'rackview') G.go('rack');
-      else if (a === 'counter' && hit.id) { if (G.station === 'tribute') G.toRack(hit.id); else G.go('tribute'); }
-      else if (a === 'shop') G.go('shop');
-      else if (a === 'dragon') { F.dragonReact('peek'); A.play('roar', .4); }
-    });
-    cv.addEventListener('pointermove', e => { if (FT.active || !G.S) return; if (Main.touch) return; const hit = F.pick(e.clientX, e.clientY); cv.style.cursor = hit && hit.action ? 'pointer' : 'default'; });
+    // touch movement stick
+    const mj = $('#mjoy'), mk = $('#mjoyK');
+    if (mj) { let id = null, cx = 0, cy = 0; const Rr = 44;
+      const mv = e => { const dx = e.clientX - cx, dy = e.clientY - cy, l = Math.min(Rr, Math.hypot(dx, dy)), a = Math.atan2(dy, dx); I.jx = Math.cos(a) * l / Rr; I.jy = Math.sin(a) * l / Rr; I.run = l > Rr * .92 ? 1 : 0; mk.style.transform = 'translate(' + (I.jx * Rr) + 'px,' + (I.jy * Rr) + 'px)'; };
+      mj.addEventListener('pointerdown', e => { e.preventDefault(); id = e.pointerId; const r = mj.getBoundingClientRect(); cx = r.left + r.width / 2; cy = r.top + r.height / 2; mj.setPointerCapture(id); mv(e); });
+      mj.addEventListener('pointermove', e => { if (e.pointerId === id) mv(e); });
+      const up = e => { if (e.pointerId !== id) return; id = null; I.jx = I.jy = 0; I.run = 0; mk.style.transform = ''; };
+      mj.addEventListener('pointerup', up); mj.addEventListener('pointercancel', up); }
+    const ib = $('#bAct'); if (ib) ib.addEventListener('pointerdown', e => { e.preventDefault(); interact(F.pickCenter()); });
   }
+  function settings() {
+    const p = G.prefs;
+    G.modal('<h2 class="h">설정</h2><div class="grid2" style="margin-top:10px">' +
+      '<label class="f">소리 크기<input type="range" id="sVol" min="0" max="1" step=".05" value="' + U.store.get('vol', .7) + '"></label>' +
+      '<label class="f">시점 감도<input type="range" id="sSens" min=".3" max="2.5" step=".1" value="' + (p.sens || 1) + '"></label>' +
+      '<label class="f chk"><span><input type="checkbox" id="sInv"' + (p.invert ? ' checked' : '') + '> 상하 반전</span></label>' +
+      '<label class="f chk"><span><input type="checkbox" id="sHeat"' + (p.autoHeat ? ' checked' : '') + '> 식으면 자동 가열</span></label>' +
+      '<label class="f">그래픽<select id="sQ"><option value="auto">자동</option><option value="low">가볍게</option><option value="high">높게</option></select></label>' +
+      '</div><p class="muted small">조작: WASD 이동 · Shift 달리기 · 마우스 드래그 시점 · E/클릭 상호작용 · Space 타격(꾹 누르면 연속) · H 가열 · G 공물 자동 선택 · B 종 · 1~6 장소로 걸어가기</p>', [{ t: '닫기', cls: 'pri' }]);
+    $('#sQ').value = U.store.get('quality', 'auto');
+    $('#sVol').oninput = e => A.setVol(+e.target.value);
+    $('#sSens').oninput = e => { p.sens = +e.target.value; G.savePrefs(); };
+    $('#sInv').onchange = e => { p.invert = e.target.checked; G.savePrefs(); };
+    $('#sHeat').onchange = e => { p.autoHeat = e.target.checked; G.savePrefs(); };
+    $('#sQ').onchange = e => { U.store.set('quality', e.target.value); G.toast('그래픽 설정은 새로고침하면 적용돼요'); };
+  }
+  Main.settings = settings;
 
   addEventListener('load', () => { try { boot().catch(e => { const l = $('#load'); if (l) l.textContent = '시작하지 못했습니다: ' + e.message; console.error(e); }); } catch (e) { const l = $('#load'); if (l) l.textContent = '그래픽을 시작하지 못했습니다: ' + e.message; console.error(e); } });
 })(window.ET);

@@ -7,11 +7,13 @@ window.ET = window.ET || {};
   U.clamp = (v, a, b) => Math.max(a, Math.min(b, v));
   U.lerp = (a, b, t) => a + (b - a) * t;
   U.ease = t => t < .5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+  const UNITS = [[1e48, '극'], [1e44, '재'], [1e40, '정'], [1e36, '간'], [1e32, '구'], [1e28, '양'], [1e24, '자'], [1e20, '해'], [1e16, '경'], [1e12, '조'], [1e8, '억']];
   U.fmt = n => {
-    n = Math.round(n);
-    if (Math.abs(n) >= 1e12) return (n / 1e12).toFixed(2) + '조';
-    if (Math.abs(n) >= 1e8) return (n / 1e8).toFixed(2) + '억';
-    if (Math.abs(n) >= 1e5) return (n / 1e4).toFixed(1) + '만';
+    if (!isFinite(n)) return '∞'; n = Math.round(n); const a = Math.abs(n);
+    if (a >= 1e52) return n.toExponential(2).replace('e+', 'e');
+    for (const [v, u] of UNITS) if (a >= v) { const x = n / v; return (x >= 100 ? x.toFixed(0) : x >= 10 ? x.toFixed(1) : x.toFixed(2)) + u; }
+    if (a >= 1e6) return Math.round(n / 1e4).toLocaleString('ko-KR') + '만';
+    if (a >= 1e5) return (n / 1e4).toFixed(1) + '만';
     return n.toLocaleString('ko-KR');
   };
   U.esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -43,7 +45,12 @@ window.ET = window.ET || {};
     star: { name: '별철검', base: 520, col: 0x283a86, glow: 0xffffff, brk: 1.05, grt: 1.35, dmg: .9, val: 1.1, ab: 'meteor', abName: '유성우', abDesc: '유성 6발을 떨어뜨린다', price: 980, rare: true, desc: '하늘에서 떨어진 쇠. 모든 면이 조금씩 좋다.' }
   };
   ET.FINAL_LV = 15;
-  ET.tierOf = lv => Math.min(5, Math.floor(lv / 3));
+  // evolution stages: the sword keeps changing shape as it climbs
+  ET.STAGES = [[0, '녹슨'], [5, '단련된'], [10, '장인의'], [15, '룬각인'], [20, '명검'], [25, '영웅의'], [30, '전설의'], [35, '신화의'], [40, '용살'], [50, '별빛'], [60, '천공의'], [80, '태초의'], [100, '신의']];
+  ET.stageOf = lv => { let s = 0; for (let i = 0; i < ET.STAGES.length; i++) if (lv >= ET.STAGES[i][0]) s = i; return s; };
+  ET.tierOf = ET.stageOf;
+  ET.stageName = (lv, type) => { const st = ET.STAGES[ET.stageOf(lv)][1], n = (ET.TYPES[type] || ET.TYPES.iron).name; return lv < 5 && type === 'iron' ? n : st + ' ' + n; };
+  ET.nextStage = lv => { const i = ET.stageOf(lv) + 1; return i < ET.STAGES.length ? ET.STAGES[i][0] : null; };
 
   // ---------- relics ----------
   // tag = icon shape
@@ -65,11 +72,27 @@ window.ET = window.ET || {};
     { id: 'tear', name: '용의 눈물', r: 3, p: 560, tag: 'tear', d: '공물 요구량 -12%.' },
     { id: 'dice', name: '도박사의 주사위', r: 3, p: 480, tag: 'dice', d: '파괴 ×1.3, 대성공 ×2.4, 검 가치 +20%.' },
     { id: 'stard', name: '별가루 주머니', r: 3, p: 540, tag: 'star', d: '+10강 이상인 검은 1강마다 가치 +4%.' },
+    { id: 'giant', name: '거인의 망치머리', r: 3, p: 620, tag: 'hammer', d: '대성공이 +2 대신 +3강.' },
+    { id: 'chain', name: '연쇄의 고리', r: 2, p: 420, tag: 'chain', d: '연타 보너스가 한 단계 일찍 시작되고 +1강 더.' },
+    { id: 'hourglass', name: '재의 모래시계', r: 2, p: 380, tag: 'hourglass', d: '불꽃 폭주 지속시간 2배.' },
+    { id: 'immortal', name: '불멸의 모루석', r: 3, p: 700, tag: 'anvilstone', d: '파괴의 절반이 유지로 바뀐다.' },
+    { id: 'crown', name: '대장장이 왕관', r: 3, p: 560, tag: 'crown', d: '숙련도를 두 배로 얻는다.' },
+    { id: 'eye', name: '용의 눈알', r: 2, p: 360, tag: 'eye', d: '황금 불꽃이 세 배 자주 튄다.' },
     { id: 'ward', name: '거울 방패', r: 2, p: 380, tag: 'mirror', d: '하루 한 번, 받은 저주를 시전자에게 반사.', mp: true }
   ];
   ET.RELIC = Object.fromEntries(ET.RELICS.map(r => [r.id, r]));
   ET.RAR = ['', '일반', '희귀', '전설'];
   ET.MAX_RELICS = 6;
+  ET.UPGRADES = {
+    hammer: { name: '망치 단련', max: 12, p: 300, d: '단계마다 파괴 ×0.94, 대성공 +0.6%p' },
+    anvil: { name: '모루 보강', max: 10, p: 260, d: '단계마다 손상 ×0.93' },
+    forge: { name: '화로 개량', max: 6, p: 240, d: '단계마다 열기 소모 -15%, 폭주 게이지 +12%' },
+    rack: { name: '거치대 증축', max: 4, p: 200, d: '단계마다 거치대 +2칸' }
+  };
+  ET.masteryOf = strikes => Math.min(40, Math.floor(Math.sqrt((strikes || 0) / 8)));
+  // combo bonus unlocks with mastery: early game is steady, late game snowballs
+  ET.comboCap = (M, chain) => M < 4 ? (chain ? 1 : 0) : 1 + Math.floor(M / 10) + (chain ? 1 : 0);
+  ET.comboBonus = (combo, M, chain) => Math.min(ET.comboCap(M, chain), Math.floor((combo + (chain ? 2 : 0)) / 5));
 
   ET.ITEMS = {
     chip: { name: '숫돌 조각', p: 180, d: '다음 타격 1회 확정 성공.', tag: 'stone' },
@@ -103,12 +126,9 @@ window.ET = window.ET || {};
     const r = U.rng(U.hash(seed, 'ev', day));
     return ET.EVENTS[r.int(ET.EVENTS.length)].id;
   };
-  ET.tributeFor = (day, contract) => {
-    if (day <= contract) return Math.round(800 * Math.pow(1.28, day - 1) / 10) * 10;
-    const last = 800 * Math.pow(1.28, contract - 1);
-    return Math.round(last * Math.pow(1.3, day - contract) / 10) * 10;
-  };
-  ET.priceScale = day => Math.pow(1.21, Math.max(0, day - 1));
+  // tribute: log-quadratic curve so the late game demands +40..+100 swords
+  ET.tributeFor = (day) => { const d = Math.max(0, day - 1), lg = 2.9 + .16 * d + .009 * d * d; const v = Math.pow(10, lg), mag = Math.pow(10, Math.floor(lg) - 2); return Math.round(v / mag) * mag; };
+  ET.priceScale = day => ET.tributeFor(day) / 800;
 
   // ---------- value & odds ----------
   ET.swordValue = function (sw, st) {
@@ -125,11 +145,15 @@ window.ET = window.ET || {};
   // returns probabilities object
   ET.odds = function (sw, st, q) {
     const T = ET.TYPES[sw.type], L = sw.lv;
-    let b = L <= 1 ? 0 : .48 * (1 - Math.exp(-(L - 1) / 9)) * T.brk;
+    let b = L <= 2 ? 0 : (.05 + .27 * (1 - Math.exp(-(L - 2) / 14))) * T.brk;
     let gs = .07 * T.grt;
-    let d = Math.min(.3, (.10 + .006 * L)) * T.dmg;
-    let h = .14;
+    let d = Math.min(.24, .10 + .002 * L) * T.dmg;
+    let h = .12;
     if (st) {
+      const up = st.upg || {}, M = ET.masteryOf(st.strikes);
+      b *= Math.pow(.94, up.hammer || 0) * Math.pow(.975, M);
+      d *= Math.pow(.93, up.anvil || 0);
+      gs += .006 * (up.hammer || 0) + .004 * M;
       if (st.has('cloak')) b *= .85;
       if (st.has('dice')) { b *= 1.3; gs *= 2.4; }
       if (st.has('shoe')) gs *= 1.7;
@@ -138,15 +162,17 @@ window.ET = window.ET || {};
       if (st.event === 'shaky') b *= 1.2;
       if (st.rustHex > 0) b *= 1.5;
       if (st.has('will')) { h += d * .45; d *= .55; }
+      if (st.has('immortal')) { h += b * .5; b *= .5; }
       if (st.has('whet')) { const t = Math.min(h, .06); h -= t; }
     }
     if (q === 'perfect') { b *= .55; const t = Math.min(h, .07); h -= t; }
     else if (q === 'miss') { b *= 1.25; gs *= .5; }
     if (sw.heat != null && sw.heat < 25) { gs = 0; d *= 1.5; }
     if (st && st.rushT > 0) { h += b; b = 0; }
+    gs = Math.min(gs, .45);
     let s = 1 - (b + gs + d + h);
     if (s < .08) { const k = (1 - .08) / (b + gs + d + h); b *= k; gs *= k; d *= k; h *= k; s = .08; }
-    if (st && st.chipNext) { return { gs: gs, s: 1 - gs, h: 0, d: 0, b: 0 }; }
+    if (st && (st.chipNext || st.goldenNow)) { return { gs: st.goldenNow ? 1 : gs, s: st.goldenNow ? 0 : 1 - gs, h: 0, d: 0, b: 0 }; }
     return { gs, s, h, d, b };
   };
   ET.drawOutcome = function (o, rnd) {
@@ -212,6 +238,7 @@ window.ET = window.ET || {};
       case 'slash': A.noiseBurst(t, .18, .35, 'bandpass', 1800, 3, 500); break;
       case 'boom': A.tone(70, 'sine', t, .005, .7, .9, 30); A.noiseBurst(t, .8, .5, 'lowpass', 1200, 1, 100); break;
       case 'zap': A.noiseBurst(t, .25, .5, 'highpass', 3000, 1); A.tone(1200, 'sawtooth', t, .002, .1, .2, 200); break;
+      case 'step': A.noiseBurst(t, .07, .06 + Math.random() * .03, 'lowpass', 380 + Math.random() * 120, 1); break;
       case 'win': [0, 4, 7, 12, 7, 12, 16, 19].forEach((s, i) => A.tone(392 * Math.pow(2, s / 12), 'triangle', t + i * .12, .01, .15, .8)); break;
     }
   };
