@@ -39,7 +39,6 @@
     // ---- lights ----
     scene.add(new THREE.HemisphereLight(0x3a2a22, 0x050304, .5));
     const fire = F.fireLight = new THREE.PointLight(0xff6a24, 7, 11, 2); fire.position.set(-2.35, 1.7, -.4);
-    if (hi) { fire.castShadow = true; fire.shadow.mapSize.set(1024, 1024); fire.shadow.bias = -.004; fire.shadow.radius = 3; }
     scene.add(fire);
     const moon = F.moon = new THREE.SpotLight(0x7f9cff, 7, 22, .32, .5, 1.2); moon.position.set(-9.5, 7, -.8); moon.target.position.set(-1.2, 0, .6); moon.castShadow = true; moon.shadow.mapSize.set(hi ? 1024 : 512, hi ? 1024 : 512); moon.shadow.bias = -.0015; scene.add(moon, moon.target);
     const lair = F.lairLight = new THREE.PointLight(0xff3a0c, 4, 14, 2); lair.position.set(0, .8, -7.5); scene.add(lair);
@@ -109,7 +108,7 @@
     const hammer = F.hammer = M.makeHammer(); hammer.rotation.set(0, Math.PI / 2, 0); hammer.position.set(0, .22, -.02); hammer.scale.setScalar(.72); vmArm.add(hammer);
     const glove = M.makeGlove(); glove.position.set(0, -.16, -.03); glove.scale.setScalar(.85); vmArm.add(glove);
     hammer.traverse(o => { o.castShadow = false; }); glove.traverse(o => { o.castShadow = false; });
-    const vmL = new THREE.PointLight(0xffb070, .35, 1.2, 2); vmL.position.set(-.2, .2, .2); vm.add(vmL);
+
     F.hammerAnim = 0;
     // ---- furnace ----
     const fur = F.furnace = M.makeFurnace(); fur.position.set(-2.95, 0, -.45); fur.rotation.y = Math.PI / 2; scene.add(fur); click(fur, 'heat');
@@ -167,7 +166,7 @@
   };
   F.setStation = function (name, instant) { const s = F.STATIONS[name]; if (!s) return; F.station = name; F.camPosT.copy(s.pos); F.camLookT.copy(s.look); if (instant) { F.camPos.copy(s.pos); F.camLook.copy(s.look); } };
   F.enterPlay = function () { F.mode = 'play'; F.station = 'play'; const P = F.P; P.x = .02; P.z = 1.15; P.yaw = 0; P.pitch = -.42; F.walk = null; F.vm.visible = !(ET.G.S && ET.G.S.hand); };
-  F.enterTitle = function () { F.mode = 'title'; F.setStation('title'); F.vm.visible = false; F.walk = null; if (F.handMesh) { F.cam.remove(F.handMesh); F.handMesh = null; } };
+  F.enterTitle = function () { F.mode = 'title'; F.setStation('title'); F.vm.visible = false; F.walk = null; if (F.handMesh) { F.kill(F.handMesh); F.handMesh = null; } };
   F.look = function (dx, dy) { const P = F.P; P.yaw -= dx; P.pitch = U.clamp(P.pitch - dy, -1.35, 1.2); if (dx || dy) F.walkLook = false; };
   F.dist = st => { const sp = F.SPOTS[st]; return sp ? Math.hypot(F.P.x - sp.c.x, F.P.z - sp.c.z) : 99; };
   F.near = st => F.mode !== 'play' || F.dist(st) < F.SPOTS[st].r;
@@ -236,12 +235,12 @@
   const Q_TRAY = basis(V(0, 0, 1), V(1, 0, 0), V(0, 1, 0));
   const swKey = sw => sw.type + ET.tierOf(sw.lv) + (sw.lv >= ET.FINAL_LV ? 'f' : '');
   F.setAnvilSword = function (sw) {
-    if (F.anvilSword && (!sw || F.anvilSword.userData.key !== swKey(sw) || F.anvilSword.userData.id !== sw.id)) { F.scene.remove(F.anvilSword); F.anvilSword = null; }
+    if (F.anvilSword && (!sw || F.anvilSword.userData.key !== swKey(sw) || F.anvilSword.userData.id !== sw.id)) { F.kill(F.anvilSword); F.anvilSword = null; }
     if (!sw) { F.anvilLight.intensity = 0; return; }
     if (!F.anvilSword) {
       const m = M.makeSword(sw.type, sw.lv); m.userData.key = swKey(sw); m.userData.id = sw.id;
       m.quaternion.copy(Q_ANVIL); m.position.set(.52, F.anvilTop + .012, .0);
-      m.traverse(o => { if (o.isMesh) { o.userData.action = 'strike'; o.userData.id = sw.id; F.clickables.push(o); } });
+      F.regSword(m, 'strike', sw.id);
       F.scene.add(m); F.anvilSword = m; m.userData.drop = 1;
     }
     M.setHeat(F.anvilSword, sw.heat);
@@ -250,14 +249,14 @@
   };
   function mk(map, sw, holder) {
     let m = map[sw.id];
-    if (m && m.userData.key !== swKey(sw)) { F.scene.remove(m); m = null; }
-    if (!m) { m = M.makeSword(sw.type, sw.lv); m.userData.key = swKey(sw); m.userData.id = sw.id; m.traverse(o => { if (o.isMesh) { o.userData.action = holder; o.userData.id = sw.id; F.clickables.push(o); } }); F.scene.add(m); map[sw.id] = m; }
+    if (m && m.userData.key !== swKey(sw)) { F.kill(m); m = null; }
+    if (!m) { m = M.makeSword(sw.type, sw.lv); m.userData.key = swKey(sw); m.userData.id = sw.id; F.regSword(m, holder, sw.id); F.scene.add(m); map[sw.id] = m; }
     return m;
   }
   function syncGroup(map, list, place, holder) {
     const seen = {};
     list.forEach((sw, i) => { seen[sw.id] = 1; const m = mk(map, sw, holder); if (!m.userData.flyT) place(m, i, list.length); M.setHeat(m, sw.heat || 0); });
-    for (const id in map) if (!seen[id]) { F.scene.remove(map[id]); delete map[id]; }
+    for (const id in map) if (!seen[id]) { F.kill(map[id]); delete map[id]; }
   }
   const Q_FLOOR = Q_TRAY.clone(), _qy = new THREE.Quaternion();
   function floorPose(m, p) { _qy.setFromAxisAngle(V(0, 1, 0), p[2]); m.quaternion.copy(_qy).multiply(Q_FLOOR); m.position.set(p[0], .028, p[1]); }
@@ -295,7 +294,7 @@
   // ---- the sword in your hand (first-person) ----
   const HAND_POS = V(.19, -.2, -.5), HAND_Q = (() => { const y = V(-.24, .7, -.67).normalize(), z0 = V(.45, .15, .88), z = z0.sub(y.clone().multiplyScalar(z0.dot(y))).normalize(), x = new THREE.Vector3().crossVectors(y, z); return basis(x, y, z); })();
   F.setHandSword = function (sw) {
-    if (F.handMesh && (!sw || F.handMesh.userData.key !== swKey(sw) || F.handMesh.userData.id !== sw.id)) { F.cam.remove(F.handMesh); F.handMesh = null; }
+    if (F.handMesh && (!sw || F.handMesh.userData.key !== swKey(sw) || F.handMesh.userData.id !== sw.id)) { F.kill(F.handMesh); F.handMesh = null; }
     F.vm.visible = F.mode === 'play' && !sw;
     if (!sw) return;
     if (!F.handMesh) { const m = M.makeSword(sw.type, sw.lv); m.userData.key = swKey(sw); m.userData.id = sw.id; m.scale.setScalar(.56); m.position.copy(HAND_POS); m.quaternion.copy(HAND_Q); m.traverse(o => { if (o.isMesh) { o.castShadow = false; o.renderOrder = 2; } }); F.cam.add(m); F.handMesh = m; m.userData.lift = 1; }
@@ -372,7 +371,7 @@
       F.scene.add(sh); F.shards.push(sh);
     }
     for (let i = 0; i < 14; i++) F.smoke.emit(V((Math.random() - .5) * .6, F.anvilTop + .1, 0), V((Math.random() - .5) * .3, .3 + Math.random() * .3, (Math.random() - .5) * .3), 2.2, .3, 0x6a6060, -.05, .99, 3);
-    F.scene.remove(m); F.anvilSword = null; F.anvilLight.intensity = 0;
+    F.kill(m); F.anvilSword = null; F.anvilLight.intensity = 0;
   };
   F.rushFx = function (on) { F.rush = on; };
   F.dragonReact = function (kind) {
@@ -391,11 +390,16 @@
   const ray = new THREE.Raycaster(), mv = new THREE.Vector2();
   F.pick = function (x, y, maxD) {
     mv.set(x / F.W * 2 - 1, -(y / F.H) * 2 + 1); ray.setFromCamera(mv, F.cam); ray.far = maxD || 100;
+    if (F.clickDirty) { F.clickables = F.clickables.filter(o => !o.userData.dead); F.clickDirty = false; }
     const hit = ray.intersectObjects(F.clickables.filter(o => inScene(o)), false)[0];
     F.hitPoint = hit ? hit.point : null; return hit ? hit.object.userData : null;
   };
   F.centerX = () => (F.W - (F.sheet || 0)) / 2;
   F.pickCenter = () => F.pick(F.centerX(), F.H / 2, 3.2);
+  // remove a sword model for good: out of the scene, out of the click list, free its own material
+  F.kill = function (m) { if (!m) return; if (m.parent) m.parent.remove(m); m.traverse(o => { o.userData.dead = true; }); if (m.userData.bladeMat) m.userData.bladeMat.dispose(); F.clickDirty = true; };
+  // register a sword for clicking: one invisible hit box instead of every hilt part
+  F.regSword = function (m, action, id) { const list = m.userData.hit ? [m.userData.hit] : []; if (!list.length) m.traverse(o => { if (o.isMesh) list.push(o); }); list.forEach(o => { o.userData.action = action; o.userData.id = id; F.clickables.push(o); }); };
   function inScene(o) { while (o.parent) o = o.parent; return o === F.scene; }
 
   // ---- update ----

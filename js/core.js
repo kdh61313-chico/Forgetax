@@ -127,7 +127,7 @@ window.ET = window.ET || {};
   ET.comboBonus = (combo, M, chain) => Math.min(ET.comboCap(M, chain), Math.floor((combo + (chain ? 2 : 0)) / 5));
 
   ET.ITEMS = {
-    chip: { name: '숫돌 조각', p: 180, d: '다음 타격 1회 확정 성공.', tag: 'stone' },
+    chip: { name: '숫돌 조각', p: 180, d: '다음 타격 1회, 파괴·강화 하락이 나오면 유지로 바꾼다. (하루 2개까지)', tag: 'stone' },
     charm: { name: '수호 부적', p: 260, d: '다음 파괴 1회를 손상으로 막는다.', tag: 'shield' },
     chest: { name: '봉인된 검 상자', p: 300, d: '무작위 종류의 검이 무작위 강화 상태로 들어 있다.', tag: 'chest' },
     salt: { name: '정화 소금', p: 160, d: '다음으로 받는 저주 1회 차단.', tag: 'pot', mp: true }
@@ -204,10 +204,11 @@ window.ET = window.ET || {};
     else if (q === 'miss') { b *= 1.25; gs *= .5; }
     if (sw.heat != null && !T.noHeat) { const c = Math.max(0, Math.min(1, (60 - sw.heat) / 60)); gs *= (1 - c) * (sw.heat >= 90 ? 1.12 : 1); d *= 1 + c * 2.2; b *= 1 + c * .6; }
     if (st && st.rushT > 0) { h += b; b = 0; }
+    if (st && st.chipNext) { h += b + d; b = 0; d = 0; }
     gs = Math.min(gs, .45);
     let s = 1 - (b + gs + d + h);
     if (s < .08) { const k = (1 - .08) / (b + gs + d + h); b *= k; gs *= k; d *= k; h *= k; s = .08; }
-    if (st && (st.chipNext || st.goldenNow)) { return { gs: st.goldenNow ? 1 : gs, s: st.goldenNow ? 0 : 1 - gs, h: 0, d: 0, b: 0 }; }
+    if (st && st.goldenNow) return { gs: 1, s: 0, h: 0, d: 0, b: 0 };
     return { gs, s, h, d, b };
   };
   ET.drawOutcome = function (o, rnd) {

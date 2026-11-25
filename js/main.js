@@ -27,8 +27,9 @@
     ET.X.size = hi ? 512 : 256; ET.X.big = hi;
     const canvas = $('#c');
     renderer = new THREE.WebGLRenderer({ canvas, antialias: false, powerPreference: 'high-performance' });
-    renderer.setPixelRatio(Math.min(devicePixelRatio, hi ? 1.5 : 1.25));
-    renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    Main.basePR = q === 'high' ? Math.min(devicePixelRatio, 1.5) : q === 'low' ? Math.min(devicePixelRatio, 1) * .8 : Math.min(devicePixelRatio, 1);
+    renderer.setPixelRatio(Main.basePR);
+    renderer.shadowMap.enabled = q !== 'low'; renderer.shadowMap.type = q === 'high' ? THREE.PCFSoftShadowMap : THREE.PCFShadowMap; renderer.shadowMap.autoUpdate = false; renderer.shadowMap.needsUpdate = true;
     renderer.outputEncoding = THREE.sRGBEncoding; renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.05;
     renderer.physicallyCorrectLights = false;
     ET.X.aniso = Math.min(8, renderer.capabilities.getMaxAnisotropy());
@@ -41,9 +42,9 @@
     try {
       if (THREE.EffectComposer) {
         composer = new THREE.EffectComposer(renderer);
-        if (hi && THREE.SSAOPass && THREE.SimplexNoise) { ssao = new THREE.SSAOPass(F.scene, F.cam, innerWidth, innerHeight); ssao.kernelRadius = .22; ssao.minDistance = .0004; ssao.maxDistance = .012; composer.addPass(ssao); }
+        if (q === 'high' && THREE.SSAOPass && THREE.SimplexNoise) { ssao = new THREE.SSAOPass(F.scene, F.cam, innerWidth, innerHeight); ssao.kernelRadius = .22; ssao.minDistance = .0004; ssao.maxDistance = .012; composer.addPass(ssao); }
         else { rpass = new THREE.RenderPass(F.scene, F.cam); composer.addPass(rpass); }
-        bloom = new THREE.UnrealBloomPass(new THREE.Vector2(innerWidth / 2, innerHeight / 2), .55, .6, .86); composer.addPass(bloom);
+        bloom = new THREE.UnrealBloomPass(new THREE.Vector2(innerWidth / (q === 'high' ? 2 : 3), innerHeight / (q === 'high' ? 2 : 3)), .55, .6, .86); composer.addPass(bloom);
         grade = new THREE.ShaderPass(GRADE); composer.addPass(grade);
         if (THREE.FXAAShader) { fxaa = new THREE.ShaderPass(THREE.FXAAShader); composer.addPass(fxaa); }
       }
@@ -61,7 +62,10 @@
       requestAnimationFrame(loop);
       const dt = Math.min(.05, (now - last) / 1000); last = now;
       // adaptive quality: drop SSAO / pixel ratio if slow
-      acc += dt; frames++; if (acc > 3) { const fps = frames / acc; if (fps < 32 && !lowered) { lowered = true; if (ssao) { ssao.enabled = false; } renderer.setPixelRatio(1); resize(); } acc = 0; frames = 0; }
+      // adaptive quality: step down while the game runs slowly (measured on real frame time, not the clamped dt)
+      const rdt = (now - (Main.lastNow || now)) / 1000; Main.lastNow = now; acc += rdt; frames++;
+      if (acc > 2.5) { const fps = frames / acc; Main.fps = fps; if (fps < 42 && Main.qLevel < 4 && !document.hidden) Main.degrade(); acc = 0; frames = 0; }
+      if (renderer.shadowMap.enabled && (Main.shF = (Main.shF || 0) + 1) % (Main.qLevel >= 2 ? 4 : 2) === 0) renderer.shadowMap.needsUpdate = true;
       if (FT.active) { Main.lockCheck(); FT.update(dt); draw(FT.scene, FT.cam, now); }
       else {
         if (F.station === 'title') { const t = now / 1000; F.camPosT.set(Math.sin(t * .07) * 1.0 + 3.0, 2.2 + Math.sin(t * .11) * .15, 3.0); }
@@ -70,6 +74,15 @@
     };
     requestAnimationFrame(loop);
   }
+  Main.qLevel = 0;
+  Main.degrade = function () {
+    Main.qLevel++; const L = Main.qLevel;
+    if (L === 1) { if (ssao && ssao.enabled !== false) ssao.enabled = false; else Main.qLevel++; }
+    if (Main.qLevel === 2) { renderer.setPixelRatio(Math.min(renderer.getPixelRatio(), .85)); resize(); }
+    if (Main.qLevel === 3) { renderer.shadowMap.enabled = false; F.scene.traverse(o => { if (o.material && o.material.needsUpdate !== undefined) o.material.needsUpdate = true; }); }
+    if (Main.qLevel === 4) { renderer.setPixelRatio(.7); resize(); if (fxaa) fxaa.enabled = false; }
+    console.info('[perf] quality level', Main.qLevel, 'fps', Main.fps && Main.fps.toFixed(1));
+  };
   function draw(scene, cam, now) {
     if (composer) {
       if (ssao) { ssao.scene = scene; ssao.camera = cam; if (ssao.enabled === false && !rpass) { rpass = new THREE.RenderPass(scene, cam); composer.insertPass(rpass, 0); } }

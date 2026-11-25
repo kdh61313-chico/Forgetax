@@ -330,8 +330,8 @@
       const sl = new THREE.Group(); sl.position.set(c * .54, y, .02); g.add(sl);
       const ped = M.lathe([[0, 0], [.11, 0], [.11, .02], [.07, .05], [.05, .1], [.08, .12], [.08, .14], [0, .14]], M.mat.brass, 20); sl.add(ped);
       const lb = new THREE.Mesh(new THREE.PlaneGeometry(.42, .092), new THREE.MeshStandardMaterial({ map: M.labelTex('— 비어 있음 —', 0), metalness: .5, roughness: .45 })); lb.position.set(0, -.03, .2); lb.rotation.x = -.5; sl.add(lb);
-      const gl2 = new THREE.PointLight(0xffd8a0, .1, .9, 2); gl2.position.set(0, .5, .12); sl.add(gl2);
-      sl.userData.label = lb; sl.userData.glow = gl2; slots.push(sl);
+      
+      sl.userData.label = lb; sl.userData.glow = { intensity: 0 }; slots.push(sl);
     });
     g.add(M.blob(2.8, 1.1, .7)); g.userData.slots = slots; return g;
   };
@@ -402,7 +402,7 @@
   // realistic blade: lenticular/diamond section with fuller, distal taper
   function bladeGeo(type, tier) {
     const key = type + tier; if (bladeCache[key]) return bladeCache[key];
-    const L = .74 + tier * .068 + (type === 'star' || type === 'gold' ? .04 : 0) - (type === 'wood' ? .06 : 0), W0 = ((WID[type] || .048) + tier * .0028) * (tier >= 8 ? 1.18 : 1), T0 = (THK[type] || .0075) * (1 + tier * .03);
+    const L = (.74 + tier * .068 + (type === 'star' || type === 'gold' ? .04 : 0) - (type === 'wood' ? .06 : 0)) * ({ shadow: 1.12, magma: 1.04, crystal: .96, rune: .9, cursed: 1.06, jade: .95, frost: 1.08 }[type] || 1), W0 = ((WID[type] || .048) + tier * .0028) * (tier >= 8 ? 1.18 : 1), T0 = (THK[type] || .0075) * (1 + tier * .03);
     const NS = 56, pos = [], uvs = [], idx = [];
     const prof = s => { // returns [halfWidth, thick, centerX]
       let w = W0 * (1 - s * .38); if (s > .82) w *= Math.sqrt(Math.max(0, (1 - s) / .18));
@@ -442,7 +442,21 @@
     return (bladeCache[key] = g);
   }
   function sm(a, b, x) { const t = Math.max(0, Math.min(1, (x - a) / (b - a))); return t * t * (3 - 2 * t); }
+  const HILT = { iron: 'cross', obsidian: 'spike', frost: 'swept', storm: 'fork', bone: 'vertebra', star: 'star', wood: 'bokken', blood: 'crescent', gold: 'winged', crystal: 'shard', shadow: 'katana', jade: 'jian', magma: 'rock', rune: 'block', cursed: 'thorn' };
+  // swords are built once per (type, stage) and cloned: clones share geometry/textures, only the blade material (heat glow) is per sword
+  const SW_TPL = {};
   M.makeSword = function (type, lv) {
+    const tier = ET.tierOf(lv), fin = lv >= ET.FINAL_LV, key = type + '|' + tier + '|' + (fin ? 1 : 0);
+    let t = SW_TPL[key];
+    if (!t) { const g0 = buildSword(type, lv), meta = g0.userData; g0.userData = {}; g0.traverse(o => { if (o === g0) return; const u = {}; for (const k in o.userData) { const v = o.userData[k]; if (v === null || typeof v !== 'object') u[k] = v; } o.userData = u; }); if (meta.orb) meta.orb.name = 'orb'; const hb = meta.hitBox; const hg = new THREE.BoxGeometry(hb[0], hb[2] - hb[1], .07); hg.translate(0, (hb[1] + hb[2]) / 2, 0); t = SW_TPL[key] = { g: g0, meta, hg }; }
+    const g = t.g.clone(true), m = t.meta, bm = m.bladeMat.clone();
+    g.traverse(o => { if (o.isMesh && o.material === m.bladeMat) o.material = bm; });
+    Object.assign(g.userData, { bladeMat: bm, len: m.len, glow: m.glow, tier: m.tier, fin: m.fin, baseEm: m.baseEm, orb: g.getObjectByName('orb') || null });
+    const hit = new THREE.Mesh(t.hg, HIT_MAT); hit.name = 'hit'; g.add(hit); g.userData.hit = hit;
+    M.setHeat(g, 0); return g;
+  };
+  const HIT_MAT = new THREE.MeshBasicMaterial({ visible: false });
+  function buildSword(type, lv) {
     const T = ET.TYPES[type] || ET.TYPES.iron, tier = ET.tierOf(lv), fin = lv >= ET.FINAL_LV;
     const g = new THREE.Group(), geo = bladeGeo(type, tier), L = geo.userData.L, W = geo.userData.W;
     const kinds = BLADE_TEX[type]; const kind = type === 'iron' ? (tier === 0 ? 'rust' : tier < 3 ? 'steel' : 'damascus') : kinds[0];
@@ -458,24 +472,135 @@
       [1, -1].forEach(sd => { const pl = new THREE.Mesh(new THREE.PlaneGeometry(W * .3, L * .55), rm); pl.position.set(0, L * .36, sd * .0062); if (sd < 0) pl.rotation.y = Math.PI; g.add(pl); });
       g.userData.rune = rm;
     }
-    // guard: lofted crossguard, quillons curve toward blade at higher tiers
+    // ---- hilt: every sword type has its own silhouette ----
+    const style = HILT[type] || 'cross';
     const gm = type === 'bone' ? M.mat.ivory : type === 'wood' ? M.mat.wood : (tier >= 3 || type === 'gold') ? M.mat.gold : M.mat.ironDark;
     const gw = W * 1.7 + .07 + tier * .012, curl = tier >= 2 ? .025 + tier * .006 : .006;
-    const guard = M.mesh(M.loft([V(-gw, curl, 0), V(-gw * .5, .004, 0), V(0, 0, 0), V(gw * .5, .004, 0), V(gw, curl, 0)], [[.009, .007], [.011, .009], [.016, .013], [.011, .009], [.009, .007]], { seg: 10, rings: 24, up: V(0, 0, 1) }), gm);
-    g.add(guard);
-    [-gw, gw].forEach(x => { const k = M.mesh(new THREE.SphereGeometry(.012 + tier * .001, 10, 8), gm); k.position.set(x, curl, 0); g.add(k); });
-    if (type === 'frost') for (let i = 0; i < 3 + tier; i++) { const c = M.mesh(new THREE.OctahedronGeometry(.008 + Math.random() * .01, 0), new THREE.MeshStandardMaterial({ color: 0xcfefff, emissive: 0x2a80b0, emissiveIntensity: .4, roughness: .05, transparent: true, opacity: .85 })); c.position.set((Math.random() - .5) * gw * 1.6, .01, (Math.random() - .5) * .02); c.scale.y = 2; g.add(c); }
-    // ricasso block + gem
-    const esc = M.box(.03, .022, .022, gm); esc.position.y = .004; g.add(esc);
-    if (tier >= 2) { const gmat = new THREE.MeshStandardMaterial({ color: glow, emissive: glow, emissiveIntensity: .5 + tier * .1, roughness: .05, metalness: .1 }); gmat.userData.lin = 1; const gem = M.mesh(new THREE.OctahedronGeometry(.011, 0), gmat); gem.position.set(0, .004, .013); gem.scale.z = .6; g.add(gem); const gem2 = gem.clone(); gem2.position.z = -.013; g.add(gem2); }
-    // grip: barrel loft with leather wrap, risers
-    const gl = .16 + tier * .008;
-    const grip = M.mesh(M.loft([V(0, -.012, 0), V(0, -gl * .5, 0), V(0, -gl, 0)], [[.0125, .011], [.0145, .0125], [.0125, .011]], { seg: 14, rings: 16, up: V(0, 0, 1), uvScaleV: .05 }), tier >= 4 ? M.mat.gold : M.mat.leather); g.add(grip);
-    if (tier >= 1) for (let i = 1; i < 4; i++) { const r = M.mesh(new THREE.TorusGeometry(.0145, .0022, 6, 18), gm); r.rotation.x = Math.PI / 2; r.position.y = -.012 - gl * i / 4; g.add(r); }
-    // pommel: wheel
-    const pom = M.lathe([[0, -.02], [.014, -.02], [.026, -.012], [.028, 0], [.026, .012], [.014, .02], [0, .02]], gm, 24); pom.rotation.x = Math.PI / 2; pom.position.y = -.012 - gl - .022; g.add(pom);
-    const peen = M.cyl(.006, .008, .012, gm, 8); peen.position.y = -.012 - gl - .046; g.add(peen);
-    if (tier >= 3) { const pmat = new THREE.MeshStandardMaterial({ color: glow, emissive: glow, emissiveIntensity: .7, roughness: .05 }); pmat.userData.lin = 1; const pg = M.mesh(new THREE.SphereGeometry(.011, 12, 8), pmat); pg.position.set(0, -.012 - gl - .022, .016); pg.scale.z = .5; g.add(pg); }
+    const at = (o, x, y, z) => { o.position.set(x || 0, y || 0, z || 0); g.add(o); return o; };
+    const std = (c, o) => new THREE.MeshStandardMaterial(Object.assign({ color: c, roughness: .45, metalness: .7 }, o || {}));
+    const glowM = k => { const m = new THREE.MeshStandardMaterial({ color: glow, emissive: glow, emissiveIntensity: k || .9, roughness: .08, metalness: .1 }); m.userData.lin = 1; return m; };
+    const mirror = (pts, radii, mat, opts) => [1, -1].forEach(sd => at(M.mesh(M.loft(pts.map(p => V(p.x * sd, p.y, p.z)), radii, Object.assign({ seg: 8, rings: 18, up: V(0, 0, 1) }, opts || {})), mat)));
+    let gl = (.16 + tier * .008) * ({ katana: 1.75, bokken: 1.5, spike: 1.18, rock: 1.15, winged: 1.05 }[style] || 1);
+    const gripY = -.012, endY = gripY - gl;
+    const grip = (mat, r0, wrap) => { at(M.mesh(M.loft([V(0, gripY, 0), V(0, gripY - gl * .5, 0), V(0, endY, 0)], [[r0 || .0125, (r0 || .0125) * .88], [(r0 || .0125) * 1.16, (r0 || .0125)], [r0 || .0125, (r0 || .0125) * .88]], { seg: 14, rings: 16, up: V(0, 0, 1), uvScaleV: .05 }), mat)); if (wrap) for (let i = 1; i < 4; i++) { const r = M.mesh(new THREE.TorusGeometry((r0 || .0125) * 1.16, .0022, 6, 18), wrap); r.rotation.x = Math.PI / 2; at(r, 0, gripY - gl * i / 4); } };
+    const wheel = (mat, gem) => { const pom = M.lathe([[0, -.02], [.014, -.02], [.026, -.012], [.028, 0], [.026, .012], [.014, .02], [0, .02]], mat, 24); pom.rotation.x = Math.PI / 2; at(pom, 0, endY - .022); at(M.cyl(.006, .008, .012, mat, 8), 0, endY - .046); if (gem) { const pg = at(M.mesh(new THREE.SphereGeometry(.011, 12, 8), glowM(.7)), 0, endY - .022, .016); pg.scale.z = .5; } };
+    const gemPair = (y, k) => { const gem = at(M.mesh(new THREE.OctahedronGeometry(.011, 0), glowM(k)), 0, y || .004, .013); gem.scale.z = .6; const g2 = gem.clone(); g2.position.z = -.013; g.add(g2); };
+    if (style === 'cross') {
+      at(M.mesh(M.loft([V(-gw, curl, 0), V(-gw * .5, .004, 0), V(0, 0, 0), V(gw * .5, .004, 0), V(gw, curl, 0)], [[.009, .007], [.011, .009], [.016, .013], [.011, .009], [.009, .007]], { seg: 10, rings: 24, up: V(0, 0, 1) }), gm));
+      [-gw, gw].forEach(x => at(M.mesh(new THREE.SphereGeometry(.012 + tier * .001, 10, 8), gm), x, curl));
+      at(M.box(.03, .022, .022, gm), 0, .004); if (tier >= 2) gemPair(.004, .5 + tier * .1);
+      grip(tier >= 4 ? M.mat.gold : M.mat.leather, 0, tier >= 1 ? gm : null); wheel(gm, tier >= 3);
+    } else if (style === 'spike') {            // obsidian: down-swept spiked guard, cone pommel
+      const ob = std(0x08080c, { roughness: .06, metalness: .35 });
+      mirror([V(0, 0, 0), V(gw * .45, -.012, 0), V(gw * .95, -.06, 0)], [[.016, .012], [.012, .009], [.003, .003]], ob);
+      [-1, 1].forEach(sd => { const c = at(M.mesh(new THREE.ConeGeometry(.012, .07, 5), ob), sd * gw * .55, .03); c.rotation.z = -sd * .35; });
+      at(M.mesh(new THREE.ConeGeometry(.014, .06, 5), ob), 0, .035);
+      grip(std(0x16141a, { roughness: .8, metalness: .1 }), .012, ob);
+      const pc = at(M.mesh(new THREE.ConeGeometry(.02, .075, 6), ob), 0, endY - .035); pc.rotation.z = Math.PI;
+      if (tier >= 2) at(M.mesh(new THREE.OctahedronGeometry(.012, 0), glowM(.9)), 0, .004, .014).scale.z = .5;
+    } else if (style === 'swept') {             // frost: knuckle-bow rapier hilt, ice pommel
+      const sv = std(0xd8ecf8, { roughness: .12, metalness: .95 });
+      at(M.mesh(M.loft([V(-gw * .55, .01, 0), V(0, 0, 0), V(gw * .55, .01, 0)], [[.006, .006], [.012, .01], [.006, .006]], { seg: 8, rings: 18, up: V(0, 0, 1) }), sv));
+      const bow = M.mesh(new THREE.TorusGeometry(gl * .5 + .012, .005, 8, 32, Math.PI), sv); bow.rotation.z = -Math.PI / 2; at(bow, .0, gripY - gl * .5); bow.scale.x = 1.5;
+      at(M.mesh(new THREE.TorusGeometry(.03, .004, 8, 24), sv), 0, .006).rotation.x = Math.PI / 2;
+      grip(std(0x9ab8cc, { roughness: .3, metalness: .8 }), .011, sv);
+      const ice = new THREE.MeshStandardMaterial({ color: 0xcfefff, emissive: 0x2a80b0, emissiveIntensity: .5, roughness: .04, metalness: .1, transparent: true, opacity: .85 });
+      at(M.mesh(new THREE.OctahedronGeometry(.026, 0), ice), 0, endY - .03).scale.y = 1.6;
+      for (let i = 0; i < 3 + Math.min(tier, 6); i++) { const c = at(M.mesh(new THREE.OctahedronGeometry(.006 + (i % 3) * .004, 0), ice), (i % 2 ? 1 : -1) * (.02 + i * .012), .012 + (i % 3) * .006, (i % 2 - .5) * .01); c.scale.y = 2.2; c.rotation.z = (i % 2 ? -1 : 1) * .5; }
+    } else if (style === 'fork') {              // storm: zig-zag lightning guard in copper, ring pommel
+      const cu = std(0xb8733a, { roughness: .28, metalness: 1 });
+      at(M.mesh(M.loft([V(-gw, .035, 0), V(-gw * .66, -.012, 0), V(-gw * .33, .022, 0), V(0, 0, 0), V(gw * .33, .022, 0), V(gw * .66, -.012, 0), V(gw, .035, 0)], [[.004, .004], [.009, .008], [.009, .008], [.014, .012], [.009, .008], [.009, .008], [.004, .004]], { seg: 8, rings: 36, up: V(0, 0, 1) }), cu));
+      [-gw, gw].forEach(x => at(M.mesh(new THREE.SphereGeometry(.009, 10, 8), glowM(1.4)), x, .038));
+      grip(std(0x1c2430, { roughness: .7, metalness: .2 }), .012, cu);
+      at(M.mesh(new THREE.TorusGeometry(.022, .0055, 8, 24), cu), 0, endY - .024);
+      at(M.mesh(new THREE.SphereGeometry(.008, 10, 8), glowM(1.4)), 0, endY - .024);
+    } else if (style === 'vertebra') {          // bone: rib horns, vertebrae grip, skull pommel
+      const iv = M.mat.ivory;
+      mirror([V(.008, 0, 0), V(gw * .55, .012, 0), V(gw * .8, .07, 0), V(gw * .62, .14, 0)], [[.014, .011], [.011, .009], [.008, .007], [.002, .002]], iv);
+      for (let i = 0; i < 6; i++) { const v = at(M.mesh(new THREE.SphereGeometry(.016, 10, 8), iv), 0, gripY - (i + .5) * gl / 6); v.scale.set(1, .62, .9); }
+      at(M.mesh(new THREE.CylinderGeometry(.008, .008, gl, 8), std(0x3a2a20, { roughness: .9, metalness: 0 })), 0, gripY - gl / 2);
+      const sk = at(M.mesh(new THREE.SphereGeometry(.03, 14, 12), iv), 0, endY - .03); sk.scale.set(1, 1.1, .95);
+      const dk = std(0x0a0806, { roughness: 1, metalness: 0 });
+      [-1, 1].forEach(sd => at(M.mesh(new THREE.SphereGeometry(.008, 8, 6), dk), sd * .011, endY - .034, .025));
+      if (tier >= 2) [-1, 1].forEach(sd => at(M.mesh(new THREE.SphereGeometry(.004, 8, 6), glowM(1.5)), sd * .011, endY - .034, .03));
+    } else if (style === 'star') {              // star: five-point star guard, glowing orb pommel
+      const shp = new THREE.Shape(), R0 = gw * .62, R1 = gw * .25;
+      for (let i = 0; i < 10; i++) { const a = Math.PI / 2 + i * Math.PI / 5, r = i % 2 ? R1 : R0; i ? shp.lineTo(Math.cos(a) * r, Math.sin(a) * r) : shp.moveTo(Math.cos(a) * r, Math.sin(a) * r); }
+      const sg = new THREE.ExtrudeGeometry(shp, { depth: .014, bevelEnabled: true, bevelThickness: .003, bevelSize: .003, bevelSegments: 1 }); sg.translate(0, 0, -.007);
+      at(M.mesh(sg, M.mat.gold), 0, .004); at(M.mesh(new THREE.SphereGeometry(.012, 12, 8), glowM(1.2)), 0, .004, .012);
+      grip(std(0x1c2050, { roughness: .6, metalness: .3 }), .012, M.mat.gold);
+      at(M.mesh(new THREE.SphereGeometry(.026, 18, 14), glowM(1.3)), 0, endY - .028);
+      at(M.mesh(new THREE.TorusGeometry(.027, .004, 8, 28), M.mat.gold), 0, endY - .028).rotation.x = Math.PI / 2;
+    } else if (style === 'bokken') {            // wood: round tsuba, cord wrap, no pommel
+      const dw = M.mat.woodDark || M.mat.wood;
+      at(M.cyl(W * 1.25 + .022, W * 1.25 + .022, .012, dw, 24), 0, -.002);
+      const cord = std(0x2a1e14, { roughness: .95, metalness: 0 });
+      at(M.mesh(new THREE.CylinderGeometry(.015, .015, gl, 12), M.mat.wood), 0, gripY - gl / 2);
+      for (let i = 0; i < 9; i++) { const r = M.mesh(new THREE.TorusGeometry(.0158, .0024, 5, 14), cord); r.rotation.x = Math.PI / 2; at(r, 0, gripY - (i + .5) * gl / 9); }
+      at(M.cyl(.016, .014, .012, dw, 12), 0, endY - .006);
+    } else if (style === 'crescent') {          // blood: horned crescent guard, ruby pommel
+      const dr = std(0x3a0c0c, { roughness: .3, metalness: .9 });
+      at(M.mesh(M.loft([V(-gw * 1.05, .085, 0), V(-gw * .75, .018, 0), V(0, 0, 0), V(gw * .75, .018, 0), V(gw * 1.05, .085, 0)], [[.002, .002], [.012, .01], [.017, .013], [.012, .01], [.002, .002]], { seg: 10, rings: 28, up: V(0, 0, 1) }), dr));
+      if (tier >= 1) gemPair(.006, 1);
+      grip(std(0x4a0e0e, { roughness: .75, metalness: .1 }), .012, dr);
+      const rb = at(M.mesh(new THREE.OctahedronGeometry(.024, 0), new THREE.MeshStandardMaterial({ color: 0xa00a14, emissive: 0x600008, emissiveIntensity: .8, roughness: .05, metalness: .2 })), 0, endY - .03); rb.scale.y = 1.4;
+    } else if (style === 'winged') {            // gold: great swept wings, teardrop pommel
+      mirror([V(.01, 0, 0), V(gw * .6, .02, 0), V(gw * 1.12, .075, 0), V(gw * 1.3, .16, 0)], [[.022, .007], [.026, .007], [.018, .005], [.003, .002]], M.mat.gold);
+      mirror([V(.01, -.004, 0), V(gw * .5, -.02, 0), V(gw * .8, -.05, 0)], [[.012, .005], [.01, .004], [.002, .002]], M.mat.gold);
+      at(M.mesh(new THREE.OctahedronGeometry(.02, 0), glowM(1)), 0, .01, .01).scale.z = .5;
+      grip(M.mat.gold, .0125, M.mat.gold);
+      at(M.lathe([[0, -.05], [.012, -.044], [.024, -.026], [.022, -.008], [.012, 0], [0, .002]], M.mat.gold, 20), 0, endY + .002);
+      at(M.mesh(new THREE.SphereGeometry(.01, 12, 8), glowM(1)), 0, endY - .03, .02).scale.z = .5;
+    } else if (style === 'shard') {             // crystal: floating crystal shards instead of a guard
+      const cr = new THREE.MeshStandardMaterial({ color: 0xdff4ff, emissive: glow, emissiveIntensity: .45, roughness: .02, metalness: .1, transparent: true, opacity: .8 }); cr.userData.lin = 1;
+      at(M.mesh(new THREE.TorusGeometry(.018, .004, 8, 20), std(0xc8d8e8, { roughness: .1, metalness: 1 })), 0, .002).rotation.x = Math.PI / 2;
+      const n = 6 + Math.min(4, tier);
+      for (let i = 0; i < n; i++) { const a = i / n * Math.PI * 2, c = at(M.mesh(new THREE.OctahedronGeometry(.012 + (i % 2) * .006, 0), cr), Math.cos(a) * (gw * .7), .015 + (i % 3) * .01, Math.sin(a) * .03); c.scale.y = 2.4; c.rotation.z = -Math.cos(a) * .7; }
+      grip(std(0x7a8aa0, { roughness: .2, metalness: .9 }), .011, null);
+      at(M.mesh(new THREE.OctahedronGeometry(.024, 0), cr), 0, endY - .03).scale.y = 1.8;
+    } else if (style === 'katana') {            // shadow: square tsuba, long diamond-wrapped grip
+      const bk = std(0x101014, { roughness: .5, metalness: .7 });
+      at(M.box(W * 2.4 + .035, .008, W * 1.6 + .03, bk), 0, -.004);
+      at(M.box(W * 1.05 + .008, .02, .016, M.mat.gold), 0, .008);
+      at(M.mesh(new THREE.CylinderGeometry(.0135, .0135, gl, 10), std(0x2a2440, { roughness: .9, metalness: 0 })), 0, gripY - gl / 2);
+      const wr = std(0x0a0a0e, { roughness: .9, metalness: 0 });
+      for (let i = 0; i < 8; i++) { const d = at(M.box(.02, .02, .004, wr), 0, gripY - (i + .5) * gl / 8, .012); d.rotation.z = Math.PI / 4; const d2 = d.clone(); d2.position.z = -.012; g.add(d2); }
+      at(M.box(.03, .012, .024, bk), 0, endY - .004);
+      if (tier >= 2) at(M.mesh(new THREE.SphereGeometry(.005, 8, 6), glowM(1.4)), 0, endY - .004, .013);
+    } else if (style === 'jian') {              // jade: small down-curved guard, jade disc pommel, red tassel
+      const br = std(0x8a6a2a, { roughness: .35, metalness: .9 });
+      at(M.mesh(M.loft([V(-gw * .55, -.022, 0), V(-gw * .3, .004, 0), V(0, .012, 0), V(gw * .3, .004, 0), V(gw * .55, -.022, 0)], [[.004, .004], [.012, .012], [.016, .016], [.012, .012], [.004, .004]], { seg: 10, rings: 24, up: V(0, 0, 1) }), br));
+      grip(std(0x1a3a2a, { roughness: .85, metalness: 0 }), .0115, br);
+      const jd = new THREE.MeshStandardMaterial({ color: 0x3a9a6a, roughness: .15, metalness: 0, transparent: true, opacity: .95, emissive: 0x0a2a18, emissiveIntensity: .5 });
+      const disc = at(M.mesh(new THREE.CylinderGeometry(.03, .03, .012, 24), jd), 0, endY - .03); disc.rotation.x = Math.PI / 2;
+      at(M.mesh(new THREE.TorusGeometry(.011, .003, 6, 16), br), 0, endY - .03, .007);
+      const red = std(0xa01818, { roughness: .9, metalness: 0 });
+      at(M.mesh(new THREE.CylinderGeometry(.0015, .0015, .05, 4), red), 0, endY - .085);
+      const ts = at(M.mesh(new THREE.ConeGeometry(.011, .06, 8), red), 0, endY - .135);
+    } else if (style === 'rock') {              // magma: chunky volcanic rock guard and pommel
+      const rk = new THREE.MeshStandardMaterial({ color: 0x1c1410, roughness: .95, metalness: 0, emissive: 0xff3a08, emissiveIntensity: .35, flatShading: true });
+      const gd = at(M.mesh(new THREE.DodecahedronGeometry(gw * .42, 0), rk), 0, .004); gd.scale.set(1.7, .55, .75);
+      [-1, 1].forEach(sd => { const k = at(M.mesh(new THREE.DodecahedronGeometry(.02, 0), rk), sd * gw * .78, .012); k.rotation.set(sd, .4, sd * .7); });
+      grip(std(0x2a1a10, { roughness: .9, metalness: .1 }), .0145, rk);
+      at(M.mesh(new THREE.DodecahedronGeometry(.032, 0), rk), 0, endY - .03).scale.y = 1.2;
+    } else if (style === 'block') {             // rune: stone block guard with glowing glyph, square pommel
+      const st = std(0x5a5a64, { roughness: .9, metalness: 0 });
+      at(M.box(gw * 1.15, .046, .05, st), 0, .006);
+      [-1, 1].forEach(sd => at(M.mesh(new THREE.PlaneGeometry(gw * .7, .022), glowM(1.2)), 0, .006, sd * .0255).rotation.y = sd < 0 ? Math.PI : 0);
+      grip(std(0x3a3a44, { roughness: .85, metalness: 0 }), .013, st);
+      at(M.box(.044, .044, .044, st), 0, endY - .026);
+      [-1, 1].forEach(sd => at(M.mesh(new THREE.PlaneGeometry(.026, .026), glowM(1.2)), 0, endY - .026, sd * .0225).rotation.y = sd < 0 ? Math.PI : 0);
+    } else if (style === 'thorn') {             // cursed: thorny guard, watching eye pommel
+      const tn = std(0x162016, { roughness: .55, metalness: .6 });
+      at(M.mesh(M.loft([V(-gw * .9, .02, 0), V(-gw * .45, -.006, 0), V(0, 0, 0), V(gw * .45, -.006, 0), V(gw * .9, .02, 0)], [[.004, .004], [.011, .01], [.015, .013], [.011, .01], [.004, .004]], { seg: 8, rings: 24, up: V(0, 0, 1) }), tn));
+      for (let i = 0; i < 8; i++) { const x = (i / 7 - .5) * gw * 1.7, c = at(M.mesh(new THREE.ConeGeometry(.005, .03, 5), tn), x, .01 + (i % 2) * .012, (i % 3 - 1) * .008); c.rotation.set((i % 3 - 1) * .8, 0, (i % 2 ? 1 : -1) * .9); }
+      grip(std(0x202a18, { roughness: .8, metalness: .2 }), .012, tn);
+      for (let i = 0; i < 6; i++) { const c = at(M.mesh(new THREE.ConeGeometry(.004, .022, 5), tn), Math.cos(i) * .014, gripY - (i + .5) * gl / 6, Math.sin(i) * .014); c.rotation.z = Math.cos(i) * -1.4; c.rotation.x = Math.sin(i) * 1.4; }
+      const eye = at(M.mesh(new THREE.SphereGeometry(.024, 16, 12), std(0xe8e0c8, { roughness: .2, metalness: 0 })), 0, endY - .028);
+      at(M.mesh(new THREE.CircleGeometry(.012, 20), glowM(1.3)), 0, endY - .028, .0242);
+      at(M.mesh(new THREE.CircleGeometry(.0055, 16), std(0x000000, { roughness: 1, metalness: 0 })), 0, endY - .028, .0246);
+      const lid = at(M.mesh(new THREE.TorusGeometry(.024, .005, 8, 24), tn), 0, endY - .028);
+    }
     // ---- evolution features by stage ----
     const additive = (op) => { const m = new THREE.MeshBasicMaterial({ color: glow, transparent: true, opacity: op, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false, side: THREE.DoubleSide }); m.userData.lin = 1; return m; };
     if (tier >= 5) { const rim = new THREE.Mesh(geo, additive(.18 + (tier - 5) * .03)); rim.scale.set(1.12, 1.005, 2.2); g.add(rim); g.userData.rim = rim; }
@@ -484,18 +609,17 @@
     if (tier >= 8) { const fl = new THREE.Group(); for (let k = 0; k < 2; k++) { const f = M.makeFire(W * 3.4, L * 1.05, .55 + (tier - 8) * .12, T.glow, k * .5 + tier); f.userData.billboard = false; f.rotation.y = k * Math.PI / 2; f.material.uniforms.uTint.value.copy(glow); fl.add(f); } fl.position.y = 0; g.add(fl); }
     if (tier >= 10) { const sh = new THREE.Mesh(geo, additive(.12)); sh.scale.set(1.5, 1.14, 3); sh.position.y = -.01; g.add(sh); g.userData.shell = sh; }
     if (tier >= 11) { const wm = new THREE.MeshStandardMaterial({ color: tier >= 12 ? 0xffffff : 0xffd890, metalness: .9, roughness: .15, emissive: glow, emissiveIntensity: .5 }); wm.userData.lin = 1; for (const sd of [-1, 1]) for (let k = 0; k < 4; k++) { const len = .12 + k * .05; const w2 = M.mesh(M.loft([V(sd * gw * .6, .01, 0), V(sd * (gw * .8 + k * .03), len * .5, -.01), V(sd * (gw * .5 + k * .05), len, 0)], [[.012, .003], [.009, .002], [.001, .001]], { seg: 6, rings: 10, up: V(0, 0, 1) }), wm); w2.rotation.z = sd * k * .12; g.add(w2); } }
-    if (tier >= 12) { const halo = new THREE.Mesh(new THREE.TorusGeometry(gw * .9, .004, 8, 64), additive(.8)); halo.position.y = -.05; g.add(halo); g.userData.halo = halo; const pl = new THREE.PointLight(glow, .8, 2.5, 2); pl.position.y = L * .5; g.add(pl); }
+    if (tier >= 12) { const halo = new THREE.Mesh(new THREE.TorusGeometry(gw * .9, .004, 8, 64), additive(.8)); halo.position.y = -.05; g.add(halo); g.userData.halo = halo; }
     // final form: drifting embers around blade
     if (fin) {
       const orb = new THREE.Group(); const om = new THREE.MeshBasicMaterial({ color: glow, toneMapped: false }); om.userData.lin = 1;
       for (let i = 0; i < 7; i++) { const sh = M.mesh(new THREE.OctahedronGeometry(.006, 0), om, false, false); const a = i / 7 * TAU; sh.position.set(Math.cos(a) * W * 1.4, L * (.15 + i * .1), Math.sin(a) * W * 1.4); orb.add(sh); }
       g.add(orb); g.userData.orb = orb;
     }
-    M.lin(g); g.userData.bladeMat = bm; g.userData.len = L; g.userData.glow = glow; g.userData.tier = tier; g.userData.fin = fin;
+    M.lin(g); g.userData.hitBox = [Math.max(gw * 2, W * 2) + .03, endY - .07, L + .02]; g.userData.bladeMat = bm; g.userData.len = L; g.userData.glow = glow; g.userData.tier = tier; g.userData.fin = fin;
     g.userData.baseEm = set.emissiveMap ? .5 + tier * .12 + (fin ? .5 : 0) : 0;
-    M.setHeat(g, 0);
     return g;
-  };
+  }
   // blackbody-ish heat color on the blade
   const HEAT = [0x000000, 0x2a0400, 0x7a1602, 0xd04406, 0xff8424].map(c => new THREE.Color(c).convertSRGBToLinear().multiplyScalar(1.4));
   M.setHeat = function (sw3, heat) {

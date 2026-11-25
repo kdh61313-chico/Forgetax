@@ -115,10 +115,13 @@
     S.gold -= p; o.sold = true; G.give(sword(o.type), '상인'); A.play('coin'); G.seen('type', o.type); G.render();
   };
   G.buyItem = function (k) {
-    if (!F.near('shop')) return G.needWalk('shop'); const S = G.S, it = ET.ITEMS[k], p = G.price(it.p); if (S.gold < p) return G.toast('골드가 부족합니다', 'bad');
+    if (!F.near('shop')) return G.needWalk('shop'); const S = G.S, it = ET.ITEMS[k], p = G.price(it.p); if (k === 'chip' && (S.shop.chipN || 0) >= 2) return G.toast('숫돌 조각은 하루에 2개까지만 팝니다', 'bad'); if (S.gold < p) return G.toast('골드가 부족합니다', 'bad');
+    if (k === 'chip') S.shop.chipN = (S.shop.chipN || 0) + 1;
     S.gold -= p; A.play('coin'); if (k === 'chest') { G.openChest(true); } else S.items[k] = (S.items[k] || 0) + 1; G.render();
   };
-  G.useChip = function () { const S = G.S; if (S.items.chip > 0 && !S.chipNext) { S.items.chip--; S.chipNext = true; G.toast('숫돌 조각: 다음 타격은 확정 성공', 'good'); G.render(); } };
+  // the merchant won't pay more than a few days of tribute for one blade, so huge swords can't print money
+  G.sellPrice = sw => { const S = G.S; return Math.min(Math.round(G.val(sw) * (ET.TYPES[sw.type].sell || .4) * (S.has('seal') ? 1.25 : 1)), Math.round(G.req() * 2.5)); };
+  G.useChip = function () { const S = G.S; if (S.items.chip > 0 && !S.chipNext) { S.items.chip--; S.chipNext = true; G.toast('숫돌 조각: 다음 타격은 파괴·하락이 나오지 않는다', 'good'); G.render(); } };
   G.reroll = function () { const S = G.S, p = G.rerollPrice(); if (S.gold < p) return G.toast('골드가 부족합니다', 'bad'); S.gold -= p; S.rerolls++; const keep = S.shop.items; S.shop = G.genShop(S.day, S.rerolls); S.shop.items = keep; A.play('coin'); F.syncAltar(S.shop.relics); G.render(); };
 
   // ---------- sword moves ----------
@@ -165,8 +168,8 @@
   G.sell = function (id) {
     const S = G.S; if (!G.canAct()) return; const sw = G.find(id); if (!sw || G.where(id) === 'counter') return;
     const team = S.mode === 'mp' && ET.Net && ET.Net.mode === 'team';
-    const g = Math.round(G.val(sw) * (ET.TYPES[sw.type].sell || .4) * (S.has('seal') ? 1.25 : 1));
-    G.modal('<h2 class="h">검 판매</h2><p>' + U.esc(ET.TYPES[sw.type].name) + ' +' + sw.lv + '을(를) <b class="gold">' + U.fmt(g) + ' G</b>에 재의 상인에게 넘길까요?</p><p class="muted small">판 검은 공물로 쓸 수 없습니다.</p>', [{ t: '취소' }].concat(team ? [{ t: '팀원에게 선물', f: () => setTimeout(() => G.gift(id), 50) }] : []).concat([{ t: '판매', cls: 'gold', f: () => { take(id); S.gold += g; A.play('coin'); G.qp('sell', 1); G.syncAll(); G.render(); } }]));
+    const raw = Math.round(G.val(sw) * (ET.TYPES[sw.type].sell || .4) * (S.has('seal') ? 1.25 : 1)), g = G.sellPrice(sw);
+    G.modal('<h2 class="h">검 판매</h2><p>' + U.esc(ET.TYPES[sw.type].name) + ' +' + sw.lv + '을(를) <b class="gold">' + U.fmt(g) + ' G</b>에 재의 상인에게 넘길까요?</p><p class="muted small">판 검은 공물로 쓸 수 없습니다.' + (raw > g ? ' 상인은 한 자루에 오늘 공물의 2.5배까지만 쳐 줍니다 (원래 가치 ' + U.fmt(raw) + ' G).' : '') + '</p>', [{ t: '취소' }].concat(team ? [{ t: '팀원에게 선물', f: () => setTimeout(() => G.gift(id), 50) }] : []).concat([{ t: '판매', cls: 'gold', f: () => { if (!take(id)) return; S.gold += g; A.play('coin'); G.qp('sell', 1); G.syncAll(); G.render(); } }]));
   };
   G.syncAll = function () { const S = G.S; F.syncRack(S.rack); F.syncFloor && F.syncFloor(S.floor || []); F.setHandSword && F.setHandSword(S.hand); F.syncCounter(S.counter); F.setAnvilSword(S.anvil); F.syncRelics && F.syncRelics(S.relics); };
   // upgrades (gold sink that makes the late game snowball)
@@ -204,7 +207,7 @@
     if (golden) { S.golden = 0; F.goldenFx && F.goldenFx(false); }
     S.strikes = (S.strikes || 0) + (S.has('crown') ? 2 : 1) * (T.mast2 ? 2 : 1);
     const M = ET.masteryOf(S.strikes), chain = S.has('chain');
-    if (S.chipNext) { S.chipNext = false; res = Math.random() < o.gs ? 'gs' : 's'; note = '숫돌'; }
+    if (S.chipNext) { S.chipNext = false; if (res === 'h') note = '숫돌이 막았다'; }
     if (res === 'h' && T.holdUp && Math.random() < T.holdUp) { res = 's'; note = '그림자'; }
     let vis = res;
     if (res === 'b') {
@@ -271,7 +274,7 @@
     setTimeout(() => {
       G.questSettle(); S.totalPaid += tot; F.tributeFly();
       if (tot >= req) {
-        let refund = (tot - req) * (S.has('tooth') ? .9 : .5) * (S.event === 'rage' ? 2 : 1); refund = Math.round(refund);
+        let refund = (tot - req) * (S.has('tooth') ? .9 : .5) * (S.event === 'rage' ? 2 : 1); refund = Math.round(Math.min(refund, req * (S.has('tooth') ? 1.5 : 1)));
         S.gold += refund; F.dragonReact('happy'); A.play('coin');
         G.float('공물 완납', 'var(--good)', refund > 0 ? '초과분 환급 +' + U.fmt(refund) + ' G' : '이그나르가 만족한다');
       } else {
@@ -585,8 +588,8 @@
   G.sellJunk = function () {
     const S = G.S, req = G.req(); const pool = S.rack.concat(S.floor), keep = pool.slice().sort((a, b) => G.val(b) - G.val(a)).slice(0, 3).map(x => x.id);
     const junk = pool.filter(x => !keep.includes(x.id) && G.val(x) < req * .08); if (!junk.length) return G.toast('팔 만한 잡검이 없다');
-    const total = junk.reduce((a, x) => a + Math.round(G.val(x) * (ET.TYPES[x.type].sell || .4) * (S.has('seal') ? 1.25 : 1)), 0);
-    G.modal('<h2 class="h">잡검 일괄 판매</h2><p>오늘 공물의 8%도 안 되는 검 ' + junk.length + '자루를 <b class="gold">' + U.fmt(total) + ' G</b>에 팝니다. (가장 비싼 3자루는 남김)</p>', [{ t: '취소' }, { t: '판매', cls: 'gold', f: () => { junk.forEach(x => take(x.id)); S.gold += total; G.qp('sell', junk.length); A.play('coin'); G.syncAll(); G.render(); } }]);
+    const total = junk.reduce((a, x) => a + G.sellPrice(x), 0);
+    G.modal('<h2 class="h">잡검 일괄 판매</h2><p>오늘 공물의 8%도 안 되는 검 ' + junk.length + '자루를 <b class="gold">' + U.fmt(total) + ' G</b>에 팝니다. (가장 비싼 3자루는 남김)</p>', [{ t: '취소' }, { t: '판매', cls: 'gold', f: () => { let got = 0; junk.forEach(x => { if (take(x.id)) got += G.sellPrice(x); }); S.gold += got; G.qp('sell', junk.length); A.play('coin'); G.syncAll(); G.render(); } }]);
   };
   G.autoTribute = function () {
     const S = G.S; if (!G.canAct() || S.settled) return; const req = G.req();
