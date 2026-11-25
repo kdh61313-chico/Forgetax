@@ -22,6 +22,8 @@
     { id: 'relic6', n: '수집광', d: '유물 칸을 가득 채웠다.' },
     { id: 'lv50', n: '별을 벼린 자', d: '+50강 검을 만들었다.' },
     { id: 'lv100', n: '신의 대장장이', d: '+100강 검을 만들었다.' },
+    { id: 'quest', n: '첫 의뢰', d: '의뢰를 처음 완료했다.' },
+    { id: 'quest15', n: '단골 대장장이', d: '한 계약에서 의뢰를 15개 완료했다.' },
     { id: 'dragon', n: '용살자', d: '이그나르를 쓰러뜨렸다.' },
     { id: 'flawless', n: '완벽한 납세자', d: '공물을 한 번도 놓치지 않고 계약을 마쳤다.' },
     { id: 'mpwin', n: '대장간의 왕', d: '멀티플레이에서 1위를 했다.' },
@@ -49,7 +51,7 @@
   };
   G.load = function () { const s = U.store.get('save', null); if (!s || s.v !== 3) return false; G.S = attach(s); G.S.phase = 'forge'; G.afterLoad(); return true; };
   G.save = function () { if (G.S && G.S.mode === 'solo' && G.S.alive) U.store.set('save', G.S); };
-  G.afterLoad = function () { const S = G.S; S.golden = 0; S.goldenNow = false; F.enterPlay && F.enterPlay(); G.syncAll(); F.syncAltar(S.shop && S.shop.relics); G.go('anvil'); G.render(); };
+  G.afterLoad = function () { if (G.S && !G.S.quests) { G.S.quests = ET.questsFor(G.S.seed, G.S.day); G.S.dq = { broken: 0 }; } setTimeout(() => { F.syncBoard && F.syncBoard(G.S && G.S.quests); G.renderQuests(); }, 0); const S = G.S; S.golden = 0; S.goldenNow = false; F.enterPlay && F.enterPlay(); G.syncAll(); F.syncAltar(S.shop && S.shop.relics); G.go('anvil'); G.render(); };
   const sword = (type, lv) => ({ id: 's' + (G.S.nextId++), type: type || 'iron', lv: lv || 0, flat: 0, heat: 100, revived: false });
   G.val = sw => ET.swordValue(sw, G.S);
   G.req = function () {
@@ -68,6 +70,7 @@
     G.allSwords().forEach(s => s.heat = 100);
     if (S.event === 'gold') S.gold += Math.round(220 * ET.priceScale(d));
     S.shop = G.genShop(d, 0);
+    S.quests = ET.questsFor(S.seed, d); S.dq = { broken: 0 }; F.syncBoard && F.syncBoard(S.quests);
     G.syncAll(); F.syncAltar(S.shop.relics);
     G.render(true);
     const ev = ET.EVENT[S.event];
@@ -88,7 +91,7 @@
       while (p > w[i]) { p -= w[i]; i++; } relics.push({ id: pool[i].id, sold: false }); pool.splice(i, 1);
     }
     const types = Object.keys(ET.TYPES).filter(t => t !== 'iron'), swords = [];
-    for (let k = 0; k < 2; k++) { let t = r.pick(types); if (t === 'star' && r() > .25) t = r.pick(types.filter(x => x !== 'star')); swords.push({ type: t, sold: false }); }
+    while (swords.length < 3) { let t = r.pick(types); if (ET.TYPES[t].rare && r() > .3) continue; if (swords.some(x => x.type === t)) continue; swords.push({ type: t, sold: false }); }
     return { relics, swords, items: Object.keys(ET.ITEMS).filter(k => mp || !ET.ITEMS[k].mp) };
   };
   G.price = function (base) { const S = G.S; let p = base * ET.priceScale(S.day) * .55; if (S.has('seal')) p *= .75; if (S.event === 'market') p *= .6; return Math.round(p / 10) * 10; };
@@ -114,7 +117,8 @@
   };
   G.buyItem = function (k) {
     if (!F.near('shop')) return G.needWalk('shop'); const S = G.S, it = ET.ITEMS[k], p = G.price(it.p); if (S.gold < p) return G.toast('골드가 부족합니다', 'bad');
-    S.gold -= p; S.items[k]++; A.play('coin'); G.render();
+    if (k === 'chest' && S.rack.length >= G.rackMax()) return G.toast('거치대가 가득 차 상자를 열 수 없습니다', 'bad');
+    S.gold -= p; A.play('coin'); if (k === 'chest') { G.openChest(true); } else S.items[k] = (S.items[k] || 0) + 1; G.render();
   };
   G.useChip = function () { const S = G.S; if (S.items.chip > 0 && !S.chipNext) { S.items.chip--; S.chipNext = true; G.toast('숫돌 조각: 다음 타격은 확정 성공', 'good'); G.render(); } };
   G.reroll = function () { const S = G.S, p = G.rerollPrice(); if (S.gold < p) return G.toast('골드가 부족합니다', 'bad'); S.gold -= p; S.rerolls++; const keep = S.shop.items; S.shop = G.genShop(S.day, S.rerolls); S.shop.items = keep; A.play('coin'); F.syncAltar(S.shop.relics); G.render(); };
@@ -131,8 +135,8 @@
   G.toCounter = function (id) { const S = G.S; if (!G.canAct() || S.settled) return; const sw = take(id); if (!sw) return; S.counter.push(sw); A.play('click'); G.syncAll(); G.render(); };
   G.sell = function (id) {
     const S = G.S; if (!G.canAct()) return; const sw = S.rack.find(s => s.id === id); if (!sw) return;
-    const g = Math.round(G.val(sw) * .4 * (S.has('seal') ? 1.25 : 1));
-    G.modal('<h2 class="h">검 판매</h2><p>' + U.esc(ET.TYPES[sw.type].name) + ' +' + sw.lv + '을(를) <b class="gold">' + U.fmt(g) + ' G</b>에 재의 상인에게 넘길까요?</p><p class="muted small">판 검은 공물로 쓸 수 없습니다.</p>', [{ t: '취소' }, { t: '판매', cls: 'gold', f: () => { take(id); S.gold += g; A.play('coin'); G.syncAll(); G.render(); } }]);
+    const g = Math.round(G.val(sw) * (ET.TYPES[sw.type].sell || .4) * (S.has('seal') ? 1.25 : 1));
+    G.modal('<h2 class="h">검 판매</h2><p>' + U.esc(ET.TYPES[sw.type].name) + ' +' + sw.lv + '을(를) <b class="gold">' + U.fmt(g) + ' G</b>에 재의 상인에게 넘길까요?</p><p class="muted small">판 검은 공물로 쓸 수 없습니다.</p>', [{ t: '취소' }, { t: '판매', cls: 'gold', f: () => { take(id); S.gold += g; A.play('coin'); G.qp('sell', 1); G.syncAll(); G.render(); } }]);
   };
   G.syncAll = function () { const S = G.S; F.syncRack(S.rack); F.syncCounter(S.counter); F.setAnvilSword(S.anvil); F.syncRelics && F.syncRelics(S.relics); };
   // upgrades (gold sink that makes the late game snowball)
@@ -169,9 +173,10 @@
     const golden = S.golden > 0;
     let res = golden ? 'gs' : ET.drawOutcome(o, Math.random), note = golden ? '황금 불꽃' : '';
     if (golden) { S.golden = 0; F.goldenFx && F.goldenFx(false); }
-    S.strikes = (S.strikes || 0) + (S.has('crown') ? 2 : 1);
+    S.strikes = (S.strikes || 0) + (S.has('crown') ? 2 : 1) * (T.mast2 ? 2 : 1);
     const M = ET.masteryOf(S.strikes), chain = S.has('chain');
     if (S.chipNext) { S.chipNext = false; res = Math.random() < o.gs ? 'gs' : 's'; note = '숫돌'; }
+    if (res === 'h' && T.holdUp && Math.random() < T.holdUp) { res = 's'; note = '그림자'; }
     let vis = res;
     if (res === 'b') {
       if (S.items.charm > 0) { S.items.charm--; res = 'd'; vis = 'd'; note = '수호 부적이 막았다'; }
@@ -179,7 +184,7 @@
       else if (T.revive && !sw.revived) { sw.revived = true; res = 'rv'; vis = 'd'; note = '용골이 되살아났다'; }
     }
     const before = sw.lv; let bonus = 0;
-    if (res === 'gs' || res === 's') { S.combo = (S.combo || 0) + 1; bonus = ET.comboBonus(S.combo, M, chain); } else if (res !== 'h') S.combo = 0;
+    if (res === 'gs' || res === 's') { S.combo = (S.combo || 0) + 1; bonus = ET.comboBonus(S.combo, M, chain); if (T.extra && Math.random() < T.extra) { bonus++; note = '피의 맥동'; } } else if (res !== 'h' && !(res === 'd' && S.has('quench'))) S.combo = 0;
     if (res === 'gs') sw.lv += (S.has('giant') ? 3 : 2) + bonus + (golden ? 2 : 0);
     else if (res === 's') { sw.lv += 1 + bonus; if (S.has('twin') && Math.random() < .15) { sw.lv += 1; note = '쌍둥이 모루'; } }
     else if (res === 'd') sw.lv = Math.max(0, sw.lv - 1);
@@ -189,30 +194,31 @@
     if (S.rushT <= 0) {
       let g = q === 'perfect' ? 2 : q === 'good' ? 1 : 0; if (S.has('bellows')) g *= 1.5; if (S.event === 'fest') g *= 2; g *= 1 + .12 * (S.upg.forge || 0);
       S.rushG = Math.min(14, S.rushG + g); if (res === 'd') S.rushG = Math.max(0, S.rushG - 2);
-      if (S.rushG >= 14) { S.rushG = 0; S.rushT = (4 + (S.has('heart') ? 2.5 : 0)) * (S.has('hourglass') ? 2 : 1); S.rushes++; A.play('rush'); F.rushFx(true); G.float('불꽃 폭주!', 'var(--gs)', '파괴 없음 · ' + S.rushT + '초'); if (S.rushes >= 3) G.ach('rush3'); G.notable('불꽃 폭주 발동!'); }
-      sw.heat = Math.max(0, sw.heat - 7 * (S.event === 'clear' ? .5 : 1) * Math.pow(.85, S.upg.forge || 0));
+      if (S.rushG >= 14) { S.rushG = 0; S.rushT = (4 + (S.has('heart') ? 2.5 : 0)) * (S.has('hourglass') ? 2 : 1); S.rushes++; G.qp('rush', 1); A.play('rush'); F.rushFx(true); G.float('불꽃 폭주!', 'var(--gs)', '파괴 없음 · ' + S.rushT + '초'); if (S.rushes >= 3) G.ach('rush3'); G.notable('불꽃 폭주 발동!'); }
+      if (!T.noHeat) sw.heat = Math.max(0, sw.heat - 7 * (S.event === 'clear' ? .5 : 1) * Math.pow(.85, S.upg.forge || 0));
     }
     if (S.rustHex > 0) S.rustHex--;
-    if (res !== 'b' && !golden && Math.random() < .035 * (S.has('eye') ? 3 : 1)) { S.golden = 1.3; F.goldenFx && F.goldenFx(true); A.play('coin'); G.float('황금 불꽃!', 'var(--gs)', '1.3초 안에 내려치면 확정 대성공 +2'); }
+    if (res !== 'b' && !golden && Math.random() < .035 * (S.has('eye') ? 3 : 1)) { S.golden = 1.3 + (S.has('clover') ? 1 : 0); F.goldenFx && F.goldenFx(true); A.play('coin'); G.float('황금 불꽃!', 'var(--gs)', '1.3초 안에 내려치면 확정 대성공 +2'); }
     // fx & ui
     F.impactFx(vis, sw);
     A.play('clang', vis === 'gs' ? 1.3 : 1);
     const val = G.val(sw);
     if (res === 'b') {
-      A.play('break'); S.anvil = null; S.broken++; G.hold = false; S.combo = 0; G.float('파괴', '#c6c8e0', U.esc(T.name) + ' +' + before + ' · ' + U.fmt(val) + ' G 증발'); if (S.broken >= 10) G.ach('break10');
+      A.play('break'); S.anvil = null; S.broken++; S.dq && S.dq.broken++; G.qfail('nobreak'); G.hold = false; S.combo = 0; G.float('파괴', '#c6c8e0', U.esc(T.name) + ' +' + before + ' · ' + U.fmt(val) + ' G 증발'); if (S.broken >= 10) G.ach('break10');
       F.flashScreen('rgba(255,255,255,.35)');
       if (before >= 8) G.notable(T.name + ' +' + before + '을(를) 부숴 먹었다');
     } else {
       F.setAnvilSword(sw);
       const bn = bonus ? ' · 연타 +' + bonus : '';
-      if (vis === 'gs') { A.play('gs'); G.float(golden ? '황금 대성공!' : '대성공!', 'var(--gs)', '+' + sw.lv + ' · ' + U.fmt(val) + ' G' + bn + (note ? ' · ' + note : '')); G.ach('first_gs'); }
+      if (vis === 'gs') { A.play('gs'); G.float(golden ? '황금 대성공!' : '대성공!', 'var(--gs)', '+' + sw.lv + ' · ' + U.fmt(val) + ' G' + bn + (note ? ' · ' + note : '')); G.ach('first_gs'); G.qp('gs', 1); }
       else if (res === 's') { A.play('succ'); G.float(S.combo >= 5 ? '연타 ' + S.combo : '성공', 'var(--s)', '+' + sw.lv + ' · ' + U.fmt(val) + ' G' + bn + (note ? ' · ' + note : '')); }
       else if (res === 'h') { A.play('hold'); G.float('유지', 'var(--h)', '+' + sw.lv); }
       else { A.play('dmg'); G.float(res === 'd' ? '손상' : '파괴 회피', 'var(--d)', '+' + sw.lv + (note ? ' · ' + note : '')); }
       if (q === 'perfect' && vis !== 'b') G.qflash = 1;
       if (sw.lv > S.bestLv) { S.bestLv = sw.lv; }
+      G.qmax('combo', S.combo || 0); G.qmax('reach', sw.lv); if (q === 'perfect') G.qp('perfect', 1);
       if (sw.lv >= 10) G.ach('lv10'); if (sw.lv >= 15) G.ach('lv15'); if (sw.lv >= 25) G.ach('lv25'); if (sw.lv >= 50) G.ach('lv50'); if (sw.lv >= 100) G.ach('lv100');
-      if (ET.stageOf(sw.lv) > ET.stageOf(before)) { setTimeout(() => { G.float('진화!', 'var(--gs)', U.esc(ET.stageName(sw.lv, sw.type)) + ' +' + sw.lv); A.play('rush'); F.evolveFx && F.evolveFx(); }, 380); G.notable(ET.stageName(sw.lv, sw.type) + '(으)로 진화! +' + sw.lv); }
+      if (ET.stageOf(sw.lv) > ET.stageOf(before)) { G.qp('evolve', 1); setTimeout(() => { G.float('진화!', 'var(--gs)', U.esc(ET.stageName(sw.lv, sw.type)) + ' +' + sw.lv); A.play('rush'); F.evolveFx && F.evolveFx(); }, 380); G.notable(ET.stageName(sw.lv, sw.type) + '(으)로 진화! +' + sw.lv); }
       if (G.prefs.target && sw.lv >= G.prefs.target && G.hold) { G.hold = false; G.toast('목표 +' + G.prefs.target + ' 도달 — 자동 타격 정지', 'good'); }
       if (vis === 'gs' && sw.lv >= 8) G.notable('대성공! ' + T.name + ' +' + sw.lv);
     }
@@ -234,7 +240,7 @@
     const tot = G.counterTotal(), req = G.req();
     F.bellRing(); A.play('bell'); G.go('tribute');
     setTimeout(() => {
-      S.totalPaid += tot; F.tributeFly();
+      G.questSettle(); S.totalPaid += tot; F.tributeFly();
       if (tot >= req) {
         let refund = (tot - req) * (S.has('tooth') ? .9 : .5) * (S.event === 'rage' ? 2 : 1); refund = Math.round(refund);
         S.gold += refund; F.dragonReact('happy'); A.play('coin');
@@ -366,6 +372,7 @@
   G.heartsHTML = (n, max, col) => Array.from({ length: max }, (_, i) => heart(i < n, col)).join('');
   // relic svg icons
   const ICON = {
+    book: '<path d="M4 4h7c1 0 1 1 1 1v15s0-1-1-1H4zM20 4h-7c-1 0-1 1-1 1v15s0-1 1-1h7z"/>', clover: '<circle cx="9" cy="9" r="3.5"/><circle cx="15" cy="9" r="3.5"/><circle cx="9" cy="15" r="3.5"/><circle cx="15" cy="15" r="3.5"/><path d="M12 12l5 9" stroke-width="1.5"/>', oil: '<path d="M10 3h4v4l3 3v10H7V10l3-3z"/>', lens: '<path fill-rule="evenodd" d="M10 3a7 7 0 1 1 0 14a7 7 0 1 1 0-14zM10 6a4 4 0 1 0 0 8a4 4 0 1 0 0-8z"/><path d="M14.5 15.5l2-2 5 5-2 2z"/>', chest: '<path d="M3 10h18v10H3zM3 10c0-5 18-5 18 0M11 13h2v3h-2z"/>',
     glove: '<path d="M7 21v-8l-2-3 2-1 2 2V4h2v7-8h2v8-7h2v8-5h2v10l-2 6z"/>', stone: '<path d="M3 15l4-6h10l4 6-4 3H7z"/>', bellows: '<path d="M4 8l12-3 4 7-4 7-12-3z M20 12h2"/>', tooth: '<path d="M6 4c3-1 9-1 12 0 1 5-1 7-2 16-1 1-2 0-2-1l-1-6h-2l-1 6c0 1-1 2-2 1-1-9-3-11-2-16z"/>',
     seal: '<circle cx="12" cy="10" r="6"/><path d="M8 15l-2 6 6-3 6 3-2-6"/>', cloak: '<path d="M12 3l7 4-2 14H7L5 7z M9 7l3 3 3-3"/>', shoe: '<path d="M6 20V9a6 6 0 0 1 12 0v11h-3V9a3 3 0 0 0-6 0v11z"/>', heart: '<path d="M12 21s-8-5.2-8-11a4.5 4.5 0 0 1 8-2.8A4.5 4.5 0 0 1 20 10c0 5.8-8 11-8 11z"/>',
     scale: '<path d="M12 3v18M5 21h14M4 7h16M4 7l-2 6h6zM20 7l-2 6h6z"/>', shield: '<path d="M12 3l8 3v6c0 5-4 8-8 9-4-1-8-4-8-9V6z"/>', pot: '<path d="M5 9h14l-2 11H7zM8 9c0-3 8-3 8 0M4 9h16"/>', bell: '<path d="M6 16a6 6 0 0 1 12 0v1H6zM12 5v4M10 20h4"/>',
@@ -381,7 +388,7 @@
   // ---------- rendering ----------
   G.go = function (st, auto) { if (!auto) G.manualT = performance.now(); if (st === 'furnace') st = 'anvil'; G.station = st; U.$$('#nav button').forEach(b => b.classList.toggle('on', b.dataset.st === st)); G.render(true); };
   G.render = function (force) {
-    const S = G.S; if (!S) return;
+    const S = G.S; if (!S) return; if (force) G.renderQuests();
     // top
     $('#dayN').textContent = S.day + '일차' + (S.endless ? ' · 무한' : ' / ' + S.contract);
     $('#evName').textContent = ET.EVENT[S.event].name;
@@ -430,7 +437,7 @@
       }
     } else if (st === 'rack') {
       const team = S.mode === 'mp' && ET.Net && ET.Net.mode === 'team';
-      h = '<div class="swhead"><h3 class="h">검 거치대 <span class="muted small">' + S.rack.length + ' / ' + G.rackMax() + '</span></h3><div class="row"><button class="btn sm ghost" id="bSort">가치순 정렬</button><button class="btn sm ghost" id="bAllCtr">전부 공물대로</button></div></div>' + (S.rack.length ? '<div class="swlist">' + S.rack.map(s => swCard(s, '<button class="btn pri" data-anv="' + s.id + '">모루</button><button class="btn" data-ctr="' + s.id + '">공물</button><button class="btn ghost" data-sell="' + s.id + '">판매</button>' + (team ? '<button class="btn ghost" data-gift="' + s.id + '">선물</button>' : ''))).join('') + '</div>' : '<div class="empty">거치대가 비어 있다.</div>') + (S.anvil ? '<p class="muted small">모루 위: ' + U.esc(ET.TYPES[S.anvil.type].name) + ' +' + S.anvil.lv + '</p>' : '');
+      h = '<div class="swhead"><h3 class="h">검 거치대 <span class="muted small">' + S.rack.length + ' / ' + G.rackMax() + '</span></h3><div class="row"><button class="btn sm ghost" id="bSort">가치순 정렬</button><button class="btn sm ghost" id="bAllCtr">전부 공물대로</button><button class="btn sm ghost" id="bJunk">잡검 판매</button></div></div>' + (S.rack.length ? '<div class="swlist">' + S.rack.map(s => swCard(s, '<button class="btn pri" data-anv="' + s.id + '">모루</button><button class="btn" data-ctr="' + s.id + '">공물</button><button class="btn ghost" data-sell="' + s.id + '">판매</button>' + (team ? '<button class="btn ghost" data-gift="' + s.id + '">선물</button>' : ''))).join('') + '</div>' : '<div class="empty">거치대가 비어 있다.</div>') + (S.anvil ? '<p class="muted small">모루 위: ' + U.esc(ET.TYPES[S.anvil.type].name) + ' +' + S.anvil.lv + '</p>' : '');
     } else if (st === 'tribute') {
       const tot = G.counterTotal(), req = G.req();
       h = '<div class="swhead"><h3 class="h">공물대</h3><div class="val">' + U.fmt(tot) + ' <span class="muted small">/ ' + U.fmt(req) + ' G</span></div></div>' +
@@ -439,7 +446,10 @@
         '<div class="row" style="margin-top:8px"><button class="btn sm" id="bAutoT">최소 가치로 자동 선택</button><button class="btn sm ghost" id="bClearT">공물대 비우기</button></div>' +
         (F.near('tribute') ? '' : '<button class="btn" data-walk="tribute" style="width:100%;margin-top:8px">공물대로 걸어가기</button>') +
         '<div class="acts" style="margin-top:8px"><button class="btn ' + (tot >= req ? 'gold' : 'pri') + '" id="bBell">종 치기 · 공물 바치기<kbd>B</kbd></button>' + (S.endless && S.dragonKills ? '<button class="btn ghost" id="bRematch">이그나르 재대결</button>' : '') + '</div>' +
-        '<p class="muted small">초과분의 ' + (S.has('tooth') ? 90 : 50) + '%는 골드로 돌려받습니다. 종을 치기 전에는 언제든 뺄 수 있어요.</p>';
+        '<p class="muted small">초과분의 ' + (S.has('tooth') ? 90 : 50) + '%는 골드로 돌려받습니다. 종을 치기 전에는 언제든 뺄 수 있어요.</p>' +
+        '<p class="muted small">내일 공물 <b>' + U.fmt(ET.tributeFor(S.day + 1)) + ' G</b> · 내일 사건 「' + ET.EVENT[ET.eventFor(S.seed, S.day + 1)].name + '」</p>';
+    } else if (st === 'quests') {
+      h = '<h3 class="h">오늘의 의뢰</h3><p class="muted small">의뢰 게시판의 일거리. 완료하면 바로 보상을 받습니다. 의뢰는 매일 바뀌어요.</p>' + (S.quests || []).map(q => '<div class="offer"><div class="ic">' + G.relicSVG(q.done ? 'book' : 'seal', q.done ? '#8fb78f' : '#c9a66b') + '</div><div><div class="n">' + U.esc(q.t) + '</div><div class="d">보상 ' + U.esc(G.questRewardText(q)) + (q.k === 'offer' ? ' · 공물대에 올리고 종을 치면 완료' : q.k === 'nobreak' ? ' · 종을 칠 때까지 파괴 0' : '') + '</div></div><b class="price">' + (q.done ? '완료' : q.failed ? '실패' : (q.k === 'offer' || q.k === 'nobreak' ? '…' : Math.min(q.prog, q.n) + '/' + q.n)) + '</b></div>').join('') + '<p class="muted small">완료한 의뢰 ' + (S.questsDone || 0) + '개</p>';
     } else if (st === 'relics') {
       h = '<h3 class="h">유물 전시장</h3><p class="muted small">가진 유물은 모두 이 진열장에 놓입니다. 눌러서 버릴 수 있어요.</p>' + (S.relics.length ? S.relics.map(id => { const R0 = ET.RELIC[id]; return '<div class="offer"><div class="ic">' + G.relicSVG(R0.tag, R0.r === 3 ? '#d6aa5a' : R0.r === 2 ? '#9ec0e0' : '#c9a66b') + '</div><div><div class="n">' + U.esc(R0.name) + '<small class="r' + R0.r + 't">' + ET.RAR[R0.r] + '</small></div><div class="d">' + U.esc(R0.d) + '</div></div><button class="btn sm ghost" data-drop="' + id + '">버리기</button></div>'; }).join('') : '<div class="empty">아직 유물이 없다. 재의 상인에게서 사 오세요.</div>') +
         '<p class="muted small">단련 상태 · 망치 ' + (S.upg.hammer || 0) + ' · 모루 ' + (S.upg.anvil || 0) + ' · 화로 ' + (S.upg.forge || 0) + ' · 거치대 ' + (S.upg.rack || 0) + ' · 숙련 ' + ET.masteryOf(S.strikes) + '</p>';
@@ -449,7 +459,7 @@
       if (tab === 'relic') h += S.shop.relics.map((o, i) => { const R = ET.RELIC[o.id], p = G.price(R.p); return '<div class="offer"><div class="ic">' + G.relicSVG(R.tag, R.r === 3 ? '#d6aa5a' : R.r === 2 ? '#9ec0e0' : '#c9a66b') + '</div><div><div class="n">' + U.esc(R.name) + '<small class="r' + R.r + 't">' + ET.RAR[R.r] + '</small></div><div class="d">' + U.esc(R.d) + '</div></div><button class="btn sm ' + (o.sold ? 'ghost' : 'gold') + '" data-br="' + i + '"' + (o.sold || S.gold < p ? ' disabled' : '') + '>' + (o.sold ? '판매됨' : U.fmt(p) + ' G') + '</button></div>'; }).join('') + '<p class="muted small">유물 ' + S.relics.length + ' / ' + ET.MAX_RELICS + '칸 · 상점은 매일 바뀝니다</p>';
       if (tab === 'up') h += Object.keys(ET.UPGRADES).map(k => { const u0 = ET.UPGRADES[k], lv = S.upg[k] || 0, mx = lv >= u0.max, p = mx ? 0 : G.upPrice(k); return '<div class="offer"><div class="ic">' + G.relicSVG(k === 'hammer' ? 'hammer' : k === 'anvil' ? 'anvil' : k === 'forge' ? 'bellows' : 'chain', '#c9a66b') + '</div><div><div class="n">' + u0.name + ' <small>' + lv + ' / ' + u0.max + '</small></div><div class="d">' + u0.d + '</div></div><button class="btn sm gold" data-up="' + k + '"' + (mx || S.gold < p ? ' disabled' : '') + '>' + (mx ? '최대' : U.fmt(p) + ' G') + '</button></div>'; }).join('') + '<p class="muted small">단련은 계약이 끝날 때까지 유지됩니다. 후반으로 갈수록 강화가 폭발적으로 쉬워져요.</p>';
       if (tab === 'sword') h += S.shop.swords.map((o, i) => { const T = ET.TYPES[o.type], p = G.price(T.price); return '<div class="offer"><div class="ic">' + swordSVG({ type: o.type, lv: 0 }) + '</div><div><div class="n">' + U.esc(T.name) + (T.rare ? '<small class="r3t">희귀</small>' : '') + '</div><div class="d">' + U.esc(T.desc) + ' 기본가 ' + T.base + ' G · 최종 고유기 「' + T.abName + '」</div></div><button class="btn sm ' + (o.sold ? 'ghost' : 'gold') + '" data-bs="' + i + '"' + (o.sold || S.gold < p ? ' disabled' : '') + '>' + (o.sold ? '판매됨' : U.fmt(p) + ' G') + '</button></div>'; }).join('');
-      if (tab === 'item') h += S.shop.items.map(k => { const it = ET.ITEMS[k], p = G.price(it.p); return '<div class="offer"><div class="ic">' + G.relicSVG(it.tag) + '</div><div><div class="n">' + it.name + ' <small>보유 ' + S.items[k] + '</small></div><div class="d">' + it.d + '</div></div><button class="btn sm gold" data-bi="' + k + '"' + (S.gold < p ? ' disabled' : '') + '>' + U.fmt(p) + ' G</button></div>'; }).join('');
+      if (tab === 'item') h += S.shop.items.map(k => { const it = ET.ITEMS[k], p = G.price(it.p); return '<div class="offer"><div class="ic">' + G.relicSVG(it.tag) + '</div><div><div class="n">' + it.name + (k === 'chest' ? ' <small>즉시 개봉</small>' : ' <small>보유 ' + (S.items[k] || 0) + '</small>') + '</div><div class="d">' + it.d + '</div></div><button class="btn sm gold" data-bi="' + k + '"' + (S.gold < p ? ' disabled' : '') + '>' + U.fmt(p) + ' G</button></div>'; }).join('');
       if (tab === 'curse') h += Object.keys(ET.CURSES).map(k => { const c = ET.CURSES[k], p = G.price(c.p); return '<div class="offer"><div class="ic">' + G.relicSVG('tear', '#c88cff') + '</div><div><div class="n">' + c.name + '</div><div class="d">' + c.d + '</div></div><button class="btn sm pri" data-bc="' + k + '"' + (S.gold < p ? ' disabled' : '') + '>' + U.fmt(p) + ' G</button></div>'; }).join('') + '<p class="muted small">정화 소금(도구)과 거울 방패(유물)로 막을 수 있습니다.</p>';
     }
     P.innerHTML = h;
@@ -464,11 +474,50 @@
     const sb = $('#bStrike'); if (sb) { sb.onclick = null; sb.onpointerdown = e => { e.preventDefault(); G.strike(); G.holdT = performance.now(); G.hold = true; }; const up = () => { if (G.hold && performance.now() - G.holdT < 350) G.hold = false; else G.hold = false; }; sb.onpointerup = up; sb.onpointerleave = up; sb.onpointercancel = up; }
     const bind = (id, f) => { const e = $('#' + id); if (e) e.onclick = f; };
     bind('bHeat', () => G.heat()); bind('bOff', () => S.anvil && G.toRack(S.anvil.id)); bind('bTo', () => S.anvil && G.toCounter(S.anvil.id)); bind('bChip', () => G.useChip());
-    bind('bBell', () => G.ringBell()); bind('bSort', () => { S.rack.sort((a, b) => G.val(b) - G.val(a)); G.syncAll(); G.render(); }); bind('bAllCtr', () => { S.rack.slice().forEach(x => G.toCounter(x.id)); }); bind('bAutoT', () => G.autoTribute()); bind('bClearT', () => { S.counter.slice().forEach(x => G.toRack(x.id)); }); bind('bReroll', () => G.reroll()); bind('bRematch', () => G.rematch());
+    bind('bBell', () => G.ringBell()); bind('bSort', () => { S.rack.sort((a, b) => G.val(b) - G.val(a)); G.syncAll(); G.render(); }); bind('bAllCtr', () => { S.rack.slice().forEach(x => G.toCounter(x.id)); }); bind('bAutoT', () => G.autoTribute()); bind('bJunk', () => G.sellJunk()); bind('bClearT', () => { S.counter.slice().forEach(x => G.toRack(x.id)); }); bind('bReroll', () => G.reroll()); bind('bRematch', () => G.rematch());
     G.layoutTiming();
   }
   G.layoutTiming = function () { const z = G.timingZones(); const g = $('#tg'), p = $('#tp'); if (!g) return; g.style.left = (50 - z.wg * 100) + '%'; g.style.width = (z.wg * 200) + '%'; p.style.left = (50 - z.wp * 100) + '%'; p.style.width = (z.wp * 200) + '%'; };
 
+  // ---- daily commissions ----
+  G.questRewardText = q => q.rw.gold ? U.fmt(G.questGold(q)) + ' G' : (ET.ITEMS[q.rw.item] ? ET.ITEMS[q.rw.item].name : '') + ' ×' + q.rw.n;
+  G.questGold = q => Math.round(q.rw.gold * ET.tributeFor(G.S.day) * (G.S.has('ledger') ? 1.6 : 1) / 10) * 10;
+  G.qdone = function (q) {
+    if (q.done) return; q.done = true; const S = G.S;
+    if (q.rw.gold) S.gold += G.questGold(q); else if (q.rw.item === 'chest') G.openChest(true); else S.items[q.rw.item] = (S.items[q.rw.item] || 0) + q.rw.n * (S.has('ledger') ? 2 : 1);
+    A.play('win'); G.toast('의뢰 완료 · ' + q.t + ' → ' + G.questRewardText(q), 'good'); G.ach('quest');
+    S.questsDone = (S.questsDone || 0) + 1; if (S.questsDone >= 15) G.ach('quest15');
+    F.syncBoard && F.syncBoard(S.quests); G.renderQuests();
+  };
+  G.qp = function (k, n) { const S = G.S; if (!S || !S.quests) return; S.quests.forEach(q => { if (q.k === k && !q.done) { q.prog += n; if (q.prog >= q.n) G.qdone(q); else G.renderQuests(); } }); };
+  G.qmax = function (k, v) { const S = G.S; if (!S || !S.quests) return; S.quests.forEach(q => { if (q.k === k && !q.done && v > q.prog) { q.prog = v; if (q.prog >= q.n) G.qdone(q); else G.renderQuests(); } }); };
+  G.qfail = function (k) { const S = G.S; if (!S || !S.quests) return; S.quests.forEach(q => { if (q.k === k && !q.done) { q.failed = true; G.renderQuests(); } }); };
+  G.questSettle = function () {
+    const S = G.S; if (!S.quests) return;
+    S.quests.forEach(q => {
+      if (q.done) return;
+      if (q.k === 'offer' && S.counter.some(x => x.type === q.ty && x.lv >= q.n)) G.qdone(q);
+      if (q.k === 'nobreak' && !q.failed) G.qdone(q);
+    });
+  };
+  G.renderQuests = function () {
+    const S = G.S, el = $('#quests'); if (!el) return; if (!S || !S.quests) { el.innerHTML = ''; return; }
+    el.innerHTML = S.quests.map(q => '<div class="q' + (q.done ? ' done' : q.failed ? ' fail' : '') + '"><span>' + U.esc(q.t) + '</span><b>' + (q.done ? '완료' : q.failed ? '실패' : (q.k === 'offer' || q.k === 'nobreak' ? '정산 때' : Math.min(q.prog, q.n) + '/' + q.n)) + '</b></div>').join('');
+    F.syncBoard && F.syncBoard(S.quests);
+  };
+  G.openChest = function (free) {
+    const S = G.S; if (S.rack.length >= G.rackMax()) { S.gold += free ? 0 : G.price(ET.ITEMS.chest.p); return G.toast('거치대가 가득 차 상자를 열 수 없어 환불했다', 'bad'); }
+    const r = Math.random(), keys = ET.TYPE_KEYS.filter(k => k !== 'iron');
+    let t = keys[Math.floor(Math.random() * keys.length)]; if (ET.TYPES[t].rare && Math.random() < .5) t = keys[Math.floor(Math.random() * keys.length)];
+    const lv = Math.floor(Math.pow(r, 2.2) * (4 + S.day * 1.4)); const sw2 = sword(t, lv); S.rack.push(sw2); G.seen('type', t);
+    F.syncRack(S.rack); A.play('gs'); G.float('상자 개봉!', 'var(--gs)', U.esc(ET.stageName(lv, t)) + ' +' + lv);
+  };
+  G.sellJunk = function () {
+    const S = G.S, req = G.req(); const keep = S.rack.slice().sort((a, b) => G.val(b) - G.val(a)).slice(0, 3).map(x => x.id);
+    const junk = S.rack.filter(x => !keep.includes(x.id) && G.val(x) < req * .08); if (!junk.length) return G.toast('팔 만한 잡검이 없다');
+    const total = junk.reduce((a, x) => a + Math.round(G.val(x) * (ET.TYPES[x.type].sell || .4) * (S.has('seal') ? 1.25 : 1)), 0);
+    G.modal('<h2 class="h">잡검 일괄 판매</h2><p>오늘 공물의 8%도 안 되는 검 ' + junk.length + '자루를 <b class="gold">' + U.fmt(total) + ' G</b>에 팝니다. (가장 비싼 3자루는 남김)</p>', [{ t: '취소' }, { t: '판매', cls: 'gold', f: () => { junk.forEach(x => take(x.id)); S.gold += total; G.qp('sell', junk.length); A.play('coin'); G.syncAll(); G.render(); } }]);
+  };
   G.autoTribute = function () {
     const S = G.S; if (!G.canAct() || S.settled) return; const req = G.req();
     const pool = S.rack.concat(S.counter); S.counter.slice().forEach(x => G.toRack(x.id));

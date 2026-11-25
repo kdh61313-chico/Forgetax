@@ -70,6 +70,13 @@ hr.rule{border:0;border-top:1px solid var(--line);margin:16px 0}
 .gold{color:var(--gold);font-weight:700;font-variant-numeric:tabular-nums;white-space:nowrap}
 #timer{font-weight:700;font-variant-numeric:tabular-nums;min-width:40px;text-align:center}
 #timer.warn{color:#e0573f}
+#quests{position:absolute;left:max(10px,var(--sa-l));top:calc(64px + var(--sa-t,0px));display:flex;flex-direction:column;gap:3px;max-width:250px;font-size:12px;cursor:pointer}
+#quests .q{display:flex;justify-content:space-between;gap:10px;background:rgba(14,10,8,.72);border:1px solid rgba(201,166,107,.22);border-left:3px solid #c9a66b;padding:4px 8px;border-radius:3px;color:#d8ccb8}
+#quests .q b{color:#c9a66b;font-weight:600;white-space:nowrap}
+#quests .q.done{opacity:.55;border-left-color:#8fb78f}#quests .q.done b{color:#8fb78f}
+#quests .q.fail{opacity:.45;border-left-color:#a04030;text-decoration:line-through}
+table.keys{width:100%;border-collapse:collapse;font-size:13px}table.keys td{padding:4px 6px;border-bottom:1px solid rgba(255,255,255,.06)}kbd{font-family:inherit;background:#2a2018;border:1px solid #4a3a28;border-radius:3px;padding:1px 6px;font-size:12px}
+.touch #quests{top:100px;left:max(10px,var(--sa-l));font-size:10px;max-width:190px;gap:2px}.touch #quests .q{padding:2px 6px}
 #relicStrip{position:absolute;left:max(10px,var(--sa-l));bottom:calc(10px + var(--sa-b));display:flex;gap:5px;flex-wrap:wrap;max-width:calc(100vw - var(--sheetW) - 30px)}
 .rel{width:36px;height:36px;border-radius:3px;background:var(--plate);border:1px solid var(--line);display:grid;place-items:center}
 .rel svg{width:22px;height:22px}
@@ -317,6 +324,7 @@ input[type=range]{padding:0;min-height:32px}
     <div class="chip" id="statChip"><div class="hearts" id="hearts"></div><div class="gold" id="goldTxt">0 G</div><div id="timer" hidden></div><button class="btn ghost sm pe" id="bSet2" title="설정" style="min-height:28px;padding:2px 8px">설정</button></div>
   </div>
   <div id="relicStrip" class="pe"></div>
+  <div id="quests" class="pe" title="오늘의 의뢰"></div>
   <aside id="rivals" class="pe"><button class="btn ghost sm" id="bRiv">라이벌 접기</button><div id="emoteBar"></div><div id="rivList" style="display:grid;gap:5px"></div></aside>
   <div id="ticker"></div>
   <div id="xh"></div><div id="prompt"></div>
@@ -329,6 +337,7 @@ input[type=range]{padding:0;min-height:32px}
       <button data-st="rack"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M14 3l7 7-9 9-3 1 1-3 9-9M5 15l4 4M3 21l3-3"/></svg>거치대</button>
       <button data-st="tribute"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M6 15a6 6 0 0 1 12 0v2H6zM12 6v3M4 19h16"/></svg>공물대</button>
       <button data-st="relics"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="4" y="3" width="16" height="18" rx="1"/><path d="M4 12h16M9 8h.01M15 8h.01M12 16h.01"/></svg>전시장</button>
+      <button data-st="quests"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M6 3h12v18H6z"/><path d="M9 8h6M9 12h6M9 16h4"/></svg>의뢰</button>
       <button data-st="shop"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 3c-4 0-6 3-6 7v11h12V10c0-4-2-7-6-7z"/><path d="M10 10h.01M14 10h.01"/></svg>상인</button>
     </nav>
     <div id="panel"></div>

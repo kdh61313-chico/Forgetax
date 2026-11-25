@@ -20,12 +20,13 @@
     rack: { c: V(6.35, 0, .3), r: 2.4, stand: V(4.55, 0, .3), look: V(6.35, 1.6, .3) },
     tribute: { c: V(2.75, 0, -2.6), r: 2.2, stand: V(2.75, 0, -1.3), look: V(2.75, 1.0, -2.6) },
     shop: { c: V(-4.1, 0, 3.0), r: 2.5, stand: V(-2.75, 0, 2.05), look: V(-4.2, 1.2, 3.3) },
-    relics: { c: V(-1.2, 0, 4.15), r: 2.2, stand: V(-1.2, 0, 2.75), look: V(-1.2, 1.35, 4.2) }
+    relics: { c: V(-1.2, 0, 4.15), r: 2.3, stand: V(-1.2, 0, 1.95), look: V(-1.2, 1.25, 4.2) },
+    quests: { c: V(1.55, 0, 4.2), r: 2.1, stand: V(1.55, 0, 2.55), look: V(1.55, 1.5, 4.4) }
   };
   F.P = { x: .02, z: 1.05, yaw: 0, pitch: -.35, bob: 0, stepAcc: 0, vx: 0, vz: 0 };
   F.input = { f: 0, b: 0, l: 0, r: 0, run: 0, jx: 0, jy: 0 };
   F.mode = 'title';
-  const COL = { circles: [[0, 0, .55], [-2.25, 1.35, .45], [-4.4, 3.4, .6], [-3.9, 2.8, .75], [5.2, 2.6, .5], [-3.9, 1.0, .6], [-2.8, .8, .5], [3.95, -2.6, .3]], boxes: [[-3.5, -2.4, -1.25, .35], [1.67, 3.83, -3.06, -2.14], [2.0, 4.4, 3.1, 3.9], [-2.4, 0, 3.85, 4.5], [-4.6, 4.6, -3.6, -3.2]], bounds: [-6.15, 5.95, -3.05, 4.15] };
+  const COL = { circles: [[0, 0, .55], [-2.25, 1.35, .45], [-4.4, 3.4, .6], [-3.9, 2.8, .75], [5.2, 2.6, .5], [-3.9, 1.0, .6], [-2.8, .8, .5], [3.95, -2.6, .3]], boxes: [[-3.5, -2.4, -1.25, .35], [1.67, 3.83, -3.06, -2.14], [2.0, 4.4, 3.1, 3.9], [-2.4, 0, 3.85, 4.5], [.7, 2.4, 4.3, 4.6], [-4.6, 4.6, -3.6, -3.2]], bounds: [-6.15, 5.95, -3.05, 4.15] };
 
   F.init = function (renderer, hi) {
     const scene = F.scene = new THREE.Scene();
@@ -141,6 +142,7 @@
     F.altarIcons = new THREE.Group(); F.altarIcons.position.set(0, .93, .78); mer.add(F.altarIcons);
     const cab = F.cabinet = M.makeCabinet(); cab.position.set(-1.2, 0, 4.42); cab.rotation.y = Math.PI; scene.add(cab); click(cab, 'relics');
     F.relicSlots = cab.userData.slots;
+    const board = F.board = M.makeBoard(); board.position.set(1.55, 0, 4.44); board.rotation.y = Math.PI; scene.add(board); click(board, 'quests');
     // ---- torches ----
     F.torches = [];
     [[6.4, 2.7, -2.2, -1], [-6.4, 2.7, 2.8, 1], [6.4, 2.7, 3.2, -1]].forEach(([x, y, z, s]) => {
@@ -170,8 +172,51 @@
   F.dist = st => { const sp = F.SPOTS[st]; return sp ? Math.hypot(F.P.x - sp.c.x, F.P.z - sp.c.z) : 99; };
   F.near = st => F.mode !== 'play' || F.dist(st) < F.SPOTS[st].r;
   F.nearest = function () { if (F.mode !== 'play') return null; let best = null, bd = 99; for (const k in F.SPOTS) { const d = F.dist(k); if (d < F.SPOTS[k].r && d < bd) { bd = d; best = k; } } return best === 'furnace' ? 'anvil' : best; };
-  F.walkTo = function (st) { const sp = F.SPOTS[st]; if (!sp || F.mode !== 'play') return; F.walk = { to: sp.stand.clone(), look: sp.look.clone(), st }; F.walkLook = true; };
+  // grid A* so auto-walk routes around the anvil / counter / furnace instead of getting stuck
+  const GS = .2;
+  function blocked(x, z) {
+    const pr = .36, b = COL.bounds; if (x < b[0] || x > b[1] || z < b[2] || z > b[3]) return true;
+    for (const [cx, cz, r] of COL.circles) if (Math.hypot(x - cx, z - cz) < r + pr) return true;
+    for (const [x0, x1, z0, z1] of COL.boxes) if (Math.hypot(x - U.clamp(x, x0, x1), z - U.clamp(z, z0, z1)) < pr) return true;
+    return false;
+  }
+  function findPath(ax, az, bx, bz) {
+    const b = COL.bounds, nx = Math.ceil((b[1] - b[0]) / GS) + 1, nz = Math.ceil((b[3] - b[2]) / GS) + 1;
+    const id = (i, j) => j * nx + i, ci = x => U.clamp(Math.round((x - b[0]) / GS), 0, nx - 1), cj = z => U.clamp(Math.round((z - b[2]) / GS), 0, nz - 1);
+    const px = i => b[0] + i * GS, pz = j => b[2] + j * GS;
+    if (!F._grid) { F._grid = new Uint8Array(nx * nz); for (let j = 0; j < nz; j++) for (let i = 0; i < nx; i++) F._grid[id(i, j)] = blocked(px(i), pz(j)) ? 1 : 0; }
+    const G = F._grid, s0 = id(ci(ax), cj(az)), t0 = id(ci(bx), cj(bz));
+    const gS = new Float32Array(nx * nz).fill(1e9), from = new Int32Array(nx * nz).fill(-1), open = [s0]; gS[s0] = 0;
+    const hf = k => Math.hypot((k % nx) - (t0 % nx), ((k / nx) | 0) - ((t0 / nx) | 0));
+    const closed = new Uint8Array(nx * nz); let it = 0;
+    while (open.length && it++ < 6000) {
+      let bi = 0; for (let k = 1; k < open.length; k++) if (gS[open[k]] + hf(open[k]) < gS[open[bi]] + hf(open[bi])) bi = k;
+      const cur = open.splice(bi, 1)[0]; if (cur === t0) break; closed[cur] = 1;
+      const ci0 = cur % nx, cj0 = (cur / nx) | 0;
+      for (let dj = -1; dj <= 1; dj++) for (let di = -1; di <= 1; di++) {
+        if (!di && !dj) continue; const i2 = ci0 + di, j2 = cj0 + dj; if (i2 < 0 || j2 < 0 || i2 >= nx || j2 >= nz) continue;
+        const n = id(i2, j2); if (closed[n] || (G[n] && n !== t0)) continue; if (di && dj && (G[id(ci0 + di, cj0)] || G[id(ci0, cj0 + dj)])) continue;
+        const g2 = gS[cur] + (di && dj ? 1.414 : 1); if (g2 < gS[n]) { gS[n] = g2; from[n] = cur; if (!open.includes(n)) open.push(n); }
+      }
+    }
+    if (from[t0] < 0) return null;
+    const cells = []; for (let k = t0; k >= 0 && k !== s0; k = from[k]) cells.push(k); cells.reverse();
+    // string-pull: keep only points where straight line becomes blocked
+    const pts = cells.map(k => V(px(k % nx), 0, pz((k / nx) | 0))), out = []; let a = V(ax, 0, az);
+    const clear = (p, q) => { const d = p.distanceTo(q), n = Math.ceil(d / .1); for (let k = 1; k < n; k++) { const t = k / n; if (blocked(p.x + (q.x - p.x) * t, p.z + (q.z - p.z) * t)) return false; } return true; };
+    let i = 0; while (i < pts.length) { let j = pts.length - 1; while (j > i && !clear(a, pts[j])) j--; out.push(pts[j]); a = pts[j]; i = j + 1; }
+    return out;
+  }
+  F.walkTo = function (st) {
+    const sp = F.SPOTS[st]; if (!sp || F.mode !== 'play') return; const P = F.P;
+    let path = null; try { path = findPath(P.x, P.z, sp.stand.x, sp.stand.z); } catch (e) { }
+    if (path && path.length) path[path.length - 1] = sp.stand.clone(); else path = [sp.stand.clone()];
+    F.walk = { to: path.shift(), path, look: sp.look.clone(), st, t: 0 }; F.walkLook = true;
+  };
   F.relicIcons = [];
+  F.syncBoard = function (qs) {
+    if (!F.board) return; (F.board.userData.papers || []).forEach((p, i) => { const q = qs && qs[i]; const key = q ? q.t + '|' + q.prog + '|' + q.done + '|' + q.failed : '-'; if (p.userData.key === key) return; p.userData.key = key; if (p.material.map) p.material.map.dispose(); p.material.map = M.questTex(q ? q.t : '', q ? (q.done ? '' : q.failed ? '실패' : (q.k === 'offer' || q.k === 'nobreak' ? '정산 때 확인' : Math.min(q.prog, q.n) + ' / ' + q.n)) : '', q && q.done); p.material.needsUpdate = true; });
+  };
   F.syncRelics = function (list) {
     F.relicIcons.forEach(o => o.parent && o.parent.remove(o)); F.relicIcons = [];
     (F.relicSlots || []).forEach((slot, i) => { const id = list[i]; slot.userData.label.material.map = M.labelTex(id ? ET.RELIC[id].name : '— 비어 있음 —', id ? ET.RELIC[id].r : 0); slot.userData.label.material.needsUpdate = true; slot.userData.glow.intensity = id ? .55 : .08; if (!id) return; const ic = M.makeRelicIcon(ET.RELIC[id].tag); ic.position.y = .2; ic.scale.setScalar(1.25); M.lin(ic); slot.add(ic); F.relicIcons.push(ic); });
@@ -234,7 +279,8 @@
     const sp = I.run ? 4.2 : 2.7;
     if (F.walk) {
       const dx = F.walk.to.x - P.x, dz = F.walk.to.z - P.z, d = Math.hypot(dx, dz);
-      if (d < .1) { const st = F.walk.st; F.walk = null; if (st && ET.G.S) { ET.G.lastNear = F.nearest(); ET.G.go(st === 'furnace' ? 'anvil' : st, true); } }
+      F.walk.t += dt;
+      if (d < (F.walk.path.length ? .3 : .1) || F.walk.t > 9) { if (F.walk.path.length && F.walk.t <= 9) { F.walk.to = F.walk.path.shift(); } else { const st = F.walk.st; F.walk = null; if (st && ET.G.S) { ET.G.lastNear = F.nearest(); ET.G.go(st === 'furnace' ? 'anvil' : st, true); } } }
       else { vx = dx / d * Math.min(sp, d * 4); vz = dz / d * Math.min(sp, d * 4); }
       if (F.walkLook) { const tgt = (F.walk || {}).look || F.lastLook; }
     } else if (manual) {
@@ -246,8 +292,8 @@
     const ox = P.x, oz = P.z; P.x += P.vx * dt; P.z += P.vz * dt; collide(P);
     const moved = Math.hypot(P.x - ox, P.z - oz);
     // turn toward the walk target's look point
-    const lk = F.walk ? F.walk.look : (F.walkLook ? F.lastLook : null);
-    if (F.walk) F.lastLook = F.walk.look;
+    const lk = F.walk ? (F.walk.path.length ? V(F.walk.to.x, 1.5, F.walk.to.z) : F.walk.look) : (F.walkLook ? F.lastLook : null);
+    if (F.walk && !F.walk.path.length) F.lastLook = F.walk.look;
     if (lk && F.walkLook) { const dx = lk.x - P.x, dz = lk.z - P.z, ty = Math.atan2(-dx, -dz), tp = Math.atan2(lk.y - 1.62, Math.hypot(dx, dz)); let dy = ty - P.yaw; dy = Math.atan2(Math.sin(dy), Math.cos(dy)); P.yaw += dy * Math.min(1, dt * 5); P.pitch += (tp - P.pitch) * Math.min(1, dt * 5); if (!F.walk && Math.abs(dy) < .01) F.walkLook = false; }
     // head bob & steps
     const spd = moved / Math.max(dt, 1e-4); P.bobT = (P.bobT || 0) + spd * dt * 5.5; P.bob = Math.sin(P.bobT) * .025 * Math.min(1, spd / 2.5);

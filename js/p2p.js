@@ -38,7 +38,7 @@
         leave() { alive = false; try { peer && peer.destroy(); } catch (e) { } return Promise.resolve(); }
       };
       try { peer = host ? new Peer(PREFIX + name, Object.assign({ config: ICE, debug: 0 }, OPT)) : new Peer(Object.assign({ config: ICE, debug: 0 }, OPT)); } catch (e) { return fail('init', e.message); }
-      const to = setTimeout(() => fail('timeout', '연결 시간이 초과됐습니다'), 15000);
+      const to = setTimeout(() => fail('timeout', '연결 시간이 초과됐습니다'), 22000);
       peer.on('error', e => {
         const t = e && e.type;
         if (!settled) { clearTimeout(to); return fail(t === 'unavailable-id' ? 'taken' : t === 'peer-unavailable' ? 'notfound' : (t || 'error'), e.message); }

@@ -166,6 +166,7 @@
     click('#bFull', () => { const d = document.documentElement; try { const p = d.requestFullscreen ? d.requestFullscreen() : d.webkitRequestFullscreen && d.webkitRequestFullscreen(); if (p && p.then) p.then(() => { try { screen.orientation.lock('landscape').catch(() => { }); } catch (e) { } }).catch(() => G.toast('이 화면에서는 전체화면을 쓸 수 없어요')); } catch (e) { G.toast('이 화면에서는 전체화면을 쓸 수 없어요'); } });
     click('#bRiv', () => { const r = $('#rivals'); r.classList.toggle('hide'); $('#bRiv').textContent = r.classList.contains('hide') ? '라이벌 보기' : '라이벌 접기'; });
     U.$$('#nav button').forEach(b => b.addEventListener('click', () => { A.play('click'); if (G.S) G.go(b.dataset.st); }));
+    $('#quests').addEventListener('click', () => { if (G.S) { G.go('quests'); F.walkTo('quests'); } });
   }
   function howTo() {
     G.modal('<h2 class="h">플레이 방법</h2>' +
@@ -188,7 +189,7 @@
       '<h4>유물</h4><div class="swlist">' + ET.RELICS.map(R => '<div class="sw" style="opacity:' + (sr[R.id] ? 1 : .45) + '"><div class="t"><span>' + R.name + '</span><i class="r' + R.r + 't">' + ET.RAR[R.r] + '</i></div><div class="v">' + (sr[R.id] ? R.d : '아직 손에 넣지 못했다') + (R.mp ? ' (멀티 전용)' : '') + '</div></div>').join('') + '</div>', [{ t: '닫기', cls: 'pri' }]);
   }
 
-  const ACT_LABEL = { strike: '모루 · 타격', heat: '화로 · 가열', bell: '종 치기', tribute: '공물대', rack: '이 검을 모루로', rackview: '검 거치대', counter: '공물에서 빼기', shop: '재의 상인', relics: '유물 전시장', dragon: '이그나르' };
+  const ACT_LABEL = { strike: '모루 · 타격', heat: '화로 · 가열', bell: '종 치기', tribute: '공물대', rack: '이 검을 모루로', rackview: '검 거치대', counter: '공물에서 빼기', shop: '재의 상인', relics: '유물 전시장', quests: '의뢰 게시판', dragon: '이그나르' };
   function interact(hit) {
     if (!hit || !hit.action || !G.S || G.S.phase === 'dead') return;
     const a = hit.action, open = st => { G.go(st); if (!F.near(st)) F.walkTo(st); };
@@ -201,9 +202,16 @@
     else if (a === 'counter' && hit.id) G.toRack(hit.id);
     else if (a === 'shop') open('shop');
     else if (a === 'relics') open('relics');
+    else if (a === 'quests') open('quests');
     else if (a === 'dragon') { F.dragonReact('peek'); A.play('roar', .4); }
   }
   Main.interact = interact;
+  Main.keyHelp = function () {
+    const rows = [['W A S D', '이동 (Shift 달리기)'], ['마우스 드래그 / ← →', '시선'], ['E · F · 클릭', '조준한 것과 상호작용'], ['Space (꾹)', '두드리기 / 계속 두드리기'], ['H', '가열'], ['R / T', '모루 위 검 → 거치대 / 공물대'], ['G', '자동 공물 선택'], ['B', '종 치기 (공물대 근처)'], ['J', '잡검 일괄 판매'], ['1 ~ 7', '모루·화로·거치대·공물대·상인·전시장·게시판으로 걷기'], ['? / F1', '이 도움말']];
+    G.modal('<h2 class="h">단축키</h2><table class="keys">' + rows.map(r => '<tr><td><kbd>' + r[0] + '</kbd></td><td>' + r[1] + '</td></tr>').join('') + '</table>', [{ t: '닫기' }]);
+  };
+  addEventListener('beforeunload', () => { try { G.save && G.save(); } catch (e) { } });
+  document.addEventListener('visibilitychange', () => { if (document.hidden) try { G.save && G.save(); } catch (e) { } });
   let promptT = 0;
   Main.updatePrompt = function () {
     const el = $('#prompt'), xh = $('#xh'); if (!el) return;
@@ -228,7 +236,9 @@
       else if (k === 't' && G.S.anvil) G.toCounter(G.S.anvil.id);
       else if (k === 'b') { if (F.near('tribute')) G.ringBell(); else { G.go('tribute'); F.walkTo('tribute'); } }
       else if (k === 'g') G.autoTribute();
-      else if ('123456'.includes(k) && k) { const st = ['anvil', 'furnace', 'rack', 'tribute', 'shop', 'relics'][+k - 1]; G.go(st === 'furnace' ? 'anvil' : st); F.walkTo(st); }
+      else if (k === '?' || k === 'f1') { e.preventDefault(); Main.keyHelp(); }
+      else if (k === 'j') G.sellJunk();
+      else if ('1234567'.includes(k) && k) { const st = ['anvil', 'furnace', 'rack', 'tribute', 'shop', 'relics', 'quests'][+k - 1]; G.go(st === 'furnace' ? 'anvil' : st); F.walkTo(st); }
       else if (k === 'escape') { G.hold = false; }
     });
     addEventListener('keyup', e => { const k = e.key.toLowerCase(); setK(k, 0); if (k === ' ') G.hold = false; });

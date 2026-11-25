@@ -42,14 +42,24 @@ window.ET = window.ET || {};
     frost: { name: '서리강철검', base: 330, col: 0xcbe9ff, glow: 0x5fd0ff, brk: .93, grt: 1, dmg: .6, val: 1, ab: 'frost', abName: '서리 감옥', abDesc: '용을 3초간 얼리고 피해', price: 420, desc: '손상이 잘 일어나지 않는다.' },
     storm: { name: '뇌철검', base: 320, col: 0x7d8899, glow: 0xffe45c, brk: 1.1, grt: 1.9, dmg: 1, val: 1, ab: 'storm', abName: '연쇄 뇌격', abDesc: '낙뢰 5연타', price: 440, desc: '대성공이 거의 두 배로 잦다.' },
     bone: { name: '용골검', base: 290, col: 0xeadfc4, glow: 0x7dff9a, brk: 1, grt: 1, dmg: 1.1, val: 1, revive: true, ab: 'skeleton', abName: '해골 군단', abDesc: '해골 전사 3기 소환', price: 400, desc: '처음 부서질 때 한 번 되살아난다(-3강).' },
-    star: { name: '별철검', base: 520, col: 0x283a86, glow: 0xffffff, brk: 1.05, grt: 1.35, dmg: .9, val: 1.1, ab: 'meteor', abName: '유성우', abDesc: '유성 6발을 떨어뜨린다', price: 980, rare: true, desc: '하늘에서 떨어진 쇠. 모든 면이 조금씩 좋다.' }
+    star: { name: '별철검', base: 520, col: 0x283a86, glow: 0xffffff, brk: 1.05, grt: 1.35, dmg: .9, val: 1.1, ab: 'meteor', abName: '유성우', abDesc: '유성 6발을 떨어뜨린다', price: 980, rare: true, desc: '하늘에서 떨어진 쇠. 모든 면이 조금씩 좋다.' },
+    wood: { name: '연습용 목검', base: 120, col: 0x8a6a48, glow: 0x9fe07a, brk: .5, grt: .8, dmg: .7, val: .6, ab: 'heal', abName: '푸른 수액', abDesc: '하트 2개 회복 + 피해', price: 110, desc: '거의 부서지지 않지만 값이 싸다. 초반 연습용.' },
+    blood: { name: '혈철검', base: 340, col: 0x5a1414, glow: 0xff3030, brk: 1.1, grt: 1, dmg: 1.3, val: 1.05, extra: .12, ab: 'storm', abName: '피의 연격', abDesc: '붉은 낙뢰 5연타', price: 450, desc: '성공할 때 12% 확률로 1강 더. 대신 손상이 잦다.' },
+    gold: { name: '황금검', base: 520, col: 0xd8a840, glow: 0xffd060, brk: 1.15, grt: 1, dmg: 1, val: 1.35, sell: .7, ab: 'meteor', abName: '황금 낙하', abDesc: '금화 운석 6발', price: 760, rare: true, desc: '가치 ×1.35, 팔면 가치의 70%를 준다.' },
+    crystal: { name: '수정검', base: 360, col: 0xd8f0ff, glow: 0x9fe8ff, brk: 1.45, grt: 2.6, dmg: .9, val: 1.05, ab: 'storm', abName: '수정 파편', abDesc: '수정 파편 5연타', price: 520, desc: '대성공 ×2.6. 하지만 유리처럼 잘 깨진다.' },
+    shadow: { name: '그림자검', base: 330, col: 0x1a1420, glow: 0x9a6aff, brk: 1.05, grt: 1, dmg: 1, val: 1.05, holdUp: .5, ab: 'skeleton', abName: '그림자 분신', abDesc: '그림자 분신 3기 소환', price: 480, desc: '"유지"가 나오면 절반 확률로 성공으로 바뀐다.' },
+    jade: { name: '비취검', base: 300, col: 0x3a8a5a, glow: 0x7affb0, brk: 1, grt: .8, dmg: 0, val: 1, ab: 'heal', abName: '비취 기운', abDesc: '하트 2개 회복 + 피해', price: 460, desc: '손상이 절대 일어나지 않는다. 대신 대성공이 적다.' },
+    magma: { name: '용암검', base: 400, col: 0x2a120a, glow: 0xff6a10, brk: 1.1, grt: 1.1, dmg: 1, val: 1.1, noHeat: true, ab: 'fireball', abName: '용암 분출', abDesc: '거리 무관 화염구 + 화상', price: 540, desc: '식지 않는다. 가열할 필요가 없다.' },
+    rune: { name: '룬석검', base: 350, col: 0x6a6a74, glow: 0x5fa8ff, brk: 1, grt: 1, dmg: 1, val: 1, mast2: true, ab: 'quake', abName: '룬 진동', abDesc: '전방 충격파', price: 500, desc: '이 검을 두드리면 숙련도를 두 배로 얻는다.' },
+    cursed: { name: '저주받은 검', base: 450, col: 0x1a2018, glow: 0x7aff40, brk: 1.45, grt: 1, dmg: 1.2, val: 1.8, ab: 'fireball', abName: '저주의 불길', abDesc: '저주 화염구 + 화상', price: 620, rare: true, desc: '가치 ×1.8. 그만큼 위험하다.' }
   };
+  ET.TYPE_KEYS = Object.keys(ET.TYPES);
   ET.FINAL_LV = 15;
   // evolution stages: the sword keeps changing shape as it climbs
   ET.STAGES = [[0, '녹슨'], [5, '단련된'], [10, '장인의'], [15, '룬각인'], [20, '명검'], [25, '영웅의'], [30, '전설의'], [35, '신화의'], [40, '용살'], [50, '별빛'], [60, '천공의'], [80, '태초의'], [100, '신의']];
   ET.stageOf = lv => { let s = 0; for (let i = 0; i < ET.STAGES.length; i++) if (lv >= ET.STAGES[i][0]) s = i; return s; };
   ET.tierOf = ET.stageOf;
-  ET.stageName = (lv, type) => { const st = ET.STAGES[ET.stageOf(lv)][1], n = (ET.TYPES[type] || ET.TYPES.iron).name; return lv < 5 && type === 'iron' ? n : st + ' ' + n; };
+  ET.stageName = (lv, type) => { const st = ET.STAGES[ET.stageOf(lv)][1], n = (ET.TYPES[type] || ET.TYPES.iron).name; return lv < 5 ? n : st + ' ' + n; };
   ET.nextStage = lv => { const i = ET.stageOf(lv) + 1; return i < ET.STAGES.length ? ET.STAGES[i][0] : null; };
 
   // ---------- relics ----------
@@ -78,16 +88,38 @@ window.ET = window.ET || {};
     { id: 'immortal', name: '불멸의 모루석', r: 3, p: 700, tag: 'anvilstone', d: '파괴의 절반이 유지로 바뀐다.' },
     { id: 'crown', name: '대장장이 왕관', r: 3, p: 560, tag: 'crown', d: '숙련도를 두 배로 얻는다.' },
     { id: 'eye', name: '용의 눈알', r: 2, p: 360, tag: 'eye', d: '황금 불꽃이 세 배 자주 튄다.' },
+    { id: 'ledger', name: '대장장이 장부', r: 1, p: 260, tag: 'book', d: '의뢰 보상 +60%.' },
+    { id: 'clover', name: '네잎 쇠붙이', r: 1, p: 240, tag: 'clover', d: '황금 불꽃이 1초 더 오래 남는다.' },
+    { id: 'quench', name: '검은 담금질 기름', r: 2, p: 380, tag: 'oil', d: '손상이 나도 연타가 끊기지 않는다.' },
+    { id: 'lens', name: '감정사의 외눈경', r: 2, p: 420, tag: 'lens', d: '거치대의 서로 다른 검 종류마다 모든 검 가치 +6%.' },
     { id: 'ward', name: '거울 방패', r: 2, p: 380, tag: 'mirror', d: '하루 한 번, 받은 저주를 시전자에게 반사.', mp: true }
   ];
   ET.RELIC = Object.fromEntries(ET.RELICS.map(r => [r.id, r]));
   ET.RAR = ['', '일반', '희귀', '전설'];
-  ET.MAX_RELICS = 6;
+  ET.MAX_RELICS = 8;
   ET.UPGRADES = {
     hammer: { name: '망치 단련', max: 12, p: 300, d: '단계마다 파괴 ×0.94, 대성공 +0.6%p' },
     anvil: { name: '모루 보강', max: 10, p: 260, d: '단계마다 손상 ×0.93' },
     forge: { name: '화로 개량', max: 6, p: 240, d: '단계마다 열기 소모 -15%, 폭주 게이지 +12%' },
     rack: { name: '거치대 증축', max: 4, p: 200, d: '단계마다 거치대 +2칸' }
+  };
+  // daily commissions (seeded so everyone in a room gets the same board)
+  ET.questsFor = function (seed, day) {
+    const r = U.rng(U.hash(seed, 'q', day)), out = [], L = Math.max(4, Math.round(3 + day * 2.2));
+    const pool = [
+      () => ({ k: 'gs', n: 2 + Math.floor(day / 4) + r.int(3), t: '대성공 {n}번' }),
+      () => ({ k: 'combo', n: 5 + Math.min(20, Math.floor(day / 2)) + r.int(4), t: '연타 {n} 달성' }),
+      () => ({ k: 'reach', n: L + r.int(4), t: '+{n} 이상 검 만들기' }),
+      () => { const ty = ET.TYPE_KEYS.filter(k => k !== 'iron' && k !== 'wood')[r.int(ET.TYPE_KEYS.length - 2)]; return { k: 'offer', ty, n: Math.max(3, Math.round(L * .6)), t: '+{n} 이상 ' + ET.TYPES[ty].name + ' 바치기' }; },
+      () => ({ k: 'perfect', n: 8 + Math.min(30, day * 2) + r.int(6), t: '완벽 타이밍 {n}번' }),
+      () => ({ k: 'rush', n: 1 + Math.floor(day / 8) + r.int(2), t: '불꽃 폭주 {n}번' }),
+      () => ({ k: 'sell', n: 2 + r.int(2), t: '검 {n}자루 팔기' }),
+      () => ({ k: 'nobreak', n: 1, t: '오늘 검을 하나도 부수지 않기' }),
+      () => ({ k: 'evolve', n: 1, t: '검 1자루 진화시키기' })
+    ];
+    const used = {};
+    while (out.length < 3) { const i = r.int(pool.length); if (used[i]) continue; used[i] = 1; const q = pool[i](); q.prog = 0; q.done = false; q.t = q.t.replace('{n}', q.n); q.rw = r() < .7 ? { gold: +(.18 + r() * .3).toFixed(2) } : { item: r() < .5 ? 'chip' : r() < .5 ? 'charm' : 'chest', n: 1 }; out.push(q); }
+    return out;
   };
   ET.masteryOf = strikes => Math.min(40, Math.floor(Math.sqrt((strikes || 0) / 8)));
   // combo bonus unlocks with mastery: early game is steady, late game snowballs
@@ -97,6 +129,7 @@ window.ET = window.ET || {};
   ET.ITEMS = {
     chip: { name: '숫돌 조각', p: 180, d: '다음 타격 1회 확정 성공.', tag: 'stone' },
     charm: { name: '수호 부적', p: 260, d: '다음 파괴 1회를 손상으로 막는다.', tag: 'shield' },
+    chest: { name: '봉인된 검 상자', p: 300, d: '무작위 종류의 검이 무작위 강화 상태로 들어 있다.', tag: 'chest' },
     salt: { name: '정화 소금', p: 160, d: '다음으로 받는 저주 1회 차단.', tag: 'pot', mp: true }
   };
   ET.CURSES = {
@@ -139,6 +172,7 @@ window.ET = window.ET || {};
       if (st.has('dice')) m *= 1.2;
       if (st.event === 'shaky') m *= 1.15;
       if (st.has('stard') && sw.lv >= 10) m *= 1 + .04 * (sw.lv - 9);
+      if (st.has('lens') && st.rack) m *= 1 + .06 * new Set(st.rack.map(x => x.type)).size;
     }
     return Math.round((T.base * Math.pow(1.45, sw.lv) + (sw.flat || 0)) * m);
   };
@@ -148,6 +182,7 @@ window.ET = window.ET || {};
     let b = L <= 2 ? 0 : (.05 + .27 * (1 - Math.exp(-(L - 2) / 14))) * T.brk;
     let gs = .07 * T.grt;
     let d = Math.min(.24, .10 + .002 * L) * T.dmg;
+    if (T.dmg === 0) d = 0;
     let h = .12;
     if (st) {
       const up = st.upg || {}, M = ET.masteryOf(st.strikes);
@@ -167,7 +202,7 @@ window.ET = window.ET || {};
     }
     if (q === 'perfect') { b *= .55; const t = Math.min(h, .07); h -= t; }
     else if (q === 'miss') { b *= 1.25; gs *= .5; }
-    if (sw.heat != null && sw.heat < 25) { gs = 0; d *= 1.5; }
+    if (sw.heat != null && sw.heat < 25 && !T.noHeat) { gs = 0; d *= 1.5; }
     if (st && st.rushT > 0) { h += b; b = 0; }
     gs = Math.min(gs, .45);
     let s = 1 - (b + gs + d + h);

@@ -72,7 +72,7 @@
     FT.teles = []; FT.projs = []; FT.minions = [];
     const T = ET.TYPES[o.sword.type]; FT.T = T; FT.fin = o.sword.lv >= ET.FINAL_LV;
     FT.ab = FT.fin ? T.ab : 'basic';
-    FT.skMax = { basic: 7, quake: 8, fireball: 6, frost: 11, storm: 8, skeleton: 15, meteor: 10 }[FT.ab];
+    FT.skMax = { basic: 7, quake: 8, fireball: 6, frost: 11, storm: 8, skeleton: 15, meteor: 10, heal: 14 }[FT.ab];
     FT.base = ET.dmgOf(o.value);
     while (FT.hand.children.length) FT.hand.remove(FT.hand.children[0]);
     const sw = M.makeSword(o.sword.type, o.sword.lv); sw.rotation.set(-.35, .25, -.35); sw.scale.setScalar(.85 / Math.max(1, sw.userData.len / .85)); sw.traverse(c => { if (c.isMesh) { c.castShadow = false; } }); FT.hand.add(sw); FT.sw3 = sw;
@@ -120,6 +120,7 @@
       case 'fireball': { p.skCd = FT.skMax; A.play('fire'); const m = new THREE.Sprite(new THREE.SpriteMaterial({ map: X.glow('rgba(190,90,255,.9)'), blending: THREE.AdditiveBlending, depthWrite: false })); m.scale.setScalar(1.4); m.position.copy(pp).add(V(0, 1.4, 0)); FT.scene.add(m); FT.projs.push({ m, from: m.position.clone(), to: chest, t: 0, dur: .45, onHit: () => { FT.hit(5, '흑염구', '#d08cff'); FT.dr.burn = 3; A.play('boom'); } }); break; }
       case 'frost': p.skCd = FT.skMax; A.play('zap'); FT.dr.frozen = 3; if (FT.dr.attack) { FT.clearTele(); FT.dr.attack = null; FT.dr.cd = 3.2; } for (let i = 0; i < 80; i++) FT.fx2.emit(chest.clone().add(V((Math.random() - .5) * 4, (Math.random() - .5) * 4, (Math.random() - .5) * 4)), V(0, .5, 0), 1.2, .3, 0xbfe8ff, 0); FT.hit(3, '서리 감옥', '#9fe0ff'); break;
       case 'storm': p.skCd = FT.skMax; for (let i = 0; i < 5; i++) setTimeout(() => { if (!FT.active) return; A.play('zap'); FT.bolt(); FT.hit(1.6, '뇌격', '#ffe45c'); }, i * 200); break;
+      case 'heal': { p.skCd = FT.skMax; A.play('gs'); p.hearts = Math.min(5, p.hearts + 2); p.inv = Math.max(p.inv, 1.2); for (let i = 0; i < 60; i++) FT.fx2.emit(pp.clone().add(V((Math.random() - .5) * 1.4, Math.random() * 2, (Math.random() - .5) * 1.4)), V(0, 1.6, 0), 1, .25, 0x9fffa0, 0); FT.hit(2.2, '생명의 수액', '#9fffa0'); break; }
       case 'skeleton': p.skCd = FT.skMax; A.play('curse'); for (let i = 0; i < 3; i++) FT.spawnSkeleton(pp, i); break;
       case 'meteor': p.skCd = FT.skMax; for (let i = 0; i < 6; i++) setTimeout(() => { if (!FT.active) return; const tgt = V((Math.random() - .5) * 3, 2, (Math.random() - .5) * 3); const m = new THREE.Sprite(new THREE.SpriteMaterial({ map: X.glow('rgba(200,220,255,.95)'), blending: THREE.AdditiveBlending, depthWrite: false })); m.scale.setScalar(1.6); FT.scene.add(m); FT.projs.push({ m, from: tgt.clone().add(V(6, 22, 4)), to: tgt, t: 0, dur: .5, onHit: () => { FT.hit(1.5, '유성', '#ffffff'); A.play('boom'); FT.shake = .15; for (let k = 0; k < 20; k++) FT.fx2.emit(tgt, V((Math.random() - .5) * 8, Math.random() * 6, (Math.random() - .5) * 8), .6, .3, 0xffffff, 8); } }); }, i * 220); break;
     }
