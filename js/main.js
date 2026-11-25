@@ -62,10 +62,10 @@
       const dt = Math.min(.05, (now - last) / 1000); last = now;
       // adaptive quality: drop SSAO / pixel ratio if slow
       acc += dt; frames++; if (acc > 3) { const fps = frames / acc; if (fps < 32 && !lowered) { lowered = true; if (ssao) { ssao.enabled = false; } renderer.setPixelRatio(1); resize(); } acc = 0; frames = 0; }
-      if (FT.active) { FT.update(dt); draw(FT.scene, FT.cam, now); }
+      if (FT.active) { Main.lockCheck(); FT.update(dt); draw(FT.scene, FT.cam, now); }
       else {
         if (F.station === 'title') { const t = now / 1000; F.camPosT.set(Math.sin(t * .07) * 1.0 + 3.0, 2.2 + Math.sin(t * .11) * .15, 3.0); }
-        G.tick(dt); F.update(dt); Main.updatePrompt(); draw(F.scene, F.cam, now);
+        G.tick(dt); F.update(dt); Main.updatePrompt(); Main.lockCheck(); draw(F.scene, F.cam, now);
       }
     };
     requestAnimationFrame(loop);
@@ -204,8 +204,8 @@
       if (a === 'heat') return '화로 가까이 들고 있으면 달궈져요';
       if (a === 'floor') return '바닥에 내려놓기';
     } else {
-      if (a === 'strike') return S.anvil ? (Main.touch ? '두드리기 · 끌어서 들기' : '클릭 두드리기 · E 들기') : '';
-      if (a === 'sword') return swName(hit.id) + ' · ' + (Main.touch ? '탭해서 들기' : 'E 들기 · 끌어서 옮기기');
+      if (a === 'strike') return S.anvil ? (Main.touch ? '두드리기 · 끌어서 들기' : '클릭 두드리기 (꾹=연속) · E 들기') : '';
+      if (a === 'sword') return swName(hit.id) + ' · ' + (Main.touch ? '탭해서 들기' : Main.locked && Main.locked() ? '클릭해서 들기' : 'E 들기 · 끌어서 옮기기');
       if (a === 'heat') return '화로 · 검을 들고 오면 달궈짐';
       if (a === 'rackview') return '검 거치대';
       if (a === 'tribute') return '공물대';
@@ -238,6 +238,7 @@
     else if (a === 'dragon') { F.dragonReact('peek'); A.play('roar', .4); }
   }
   Main.interact = interact;
+  Main.lockCheck = function () { if (Main.locked && Main.locked() && !Main.lockWanted()) document.exitPointerLock(); if (Main.lockHint && ((Main.lhT = (Main.lhT || 0) + 1) % 15 === 0)) Main.lockHint(); };
   Main.keyHelp = function () {
     const rows = [['W A S D', '이동 (Shift 달리기)'], ['마우스 드래그 / ← →', '시선'], ['E · F', '조준한 검 들기 / 든 검 놓기'], ['검을 끌어서 놓기', '바닥의 검을 끌어 모루·거치대·공물대에 놓기'], ['클릭 · Space (꾹)', '모루 위 검 두드리기 / 계속'], ['Q', '든 검 바닥에 내려놓기'], ['화로', '검을 들고 가까이 가면 달궈짐 · 식은 검은 강화 하락 위험'], ['R / T', '든 검 → 거치대 / 공물대'], ['G', '자동 공물 선택'], ['B', '종 치기 (공물대 근처)'], ['J', '잡검 일괄 판매'], ['1 ~ 7', '모루·화로·거치대·공물대·상인·전시장·게시판으로 걷기'], ['? / F1', '이 도움말']];
     G.modal('<h2 class="h">단축키</h2><table class="keys">' + rows.map(r => '<tr><td><kbd>' + r[0] + '</kbd></td><td>' + r[1] + '</td></tr>').join('') + '</table>', [{ t: '닫기' }]);
@@ -280,10 +281,29 @@
     addEventListener('blur', () => { for (const k in I) I[k] = 0; F.turnL = F.turnR = 0; G.hold = false; });
     const cv = $('#c'); let drag = null;
     cv.addEventListener('contextmenu', e => e.preventDefault());
+    // ---- mouse lock (FPS look). First click locks the cursor; Esc releases it. ----
+    Main.locked = () => document.pointerLockElement === cv;
+    Main.lockWanted = () => !Main.touch && !Main.lockFailed && G.prefs.lock !== false && G.S && F.mode === 'play' && !FT.active && !G.panel && !$('#modal').classList.contains('show') && $('#hud').classList.contains('show');
+    Main.lock = function () { try { const r = cv.requestPointerLock({ unadjustedMovement: false }); if (r && r.catch) r.catch(() => lockErr()); } catch (er) { lockErr(); } };
+    function lockErr() { if (Main.lockOk || Main.lockFailed) return; Main.lockFailed = true; G.toast('이 화면에서는 마우스 고정이 막혀 있어요. 드래그로 시점을 돌리거나, GitHub 페이지에서 열면 고정됩니다.', 'bad'); }
+    document.addEventListener('pointerlockchange', () => { if (Main.locked()) { Main.lockOk = true; drag = null; } else { G.hold = false; lk = null; Main.dragging = false; F.dragEnd && F.dragEnd(); Main.dropHint(''); } Main.lockHint(); });
+    document.addEventListener('pointerlockerror', lockErr);
+    Main.lockHint = function () { const el = $('#lockHint'); if (!el) return; el.style.display = !Main.locked() && Main.lockWanted() ? 'block' : 'none'; };
+    let lk = null;
+    const centerHint = () => { const S = G.S; Main.dropHint(S && S.hand && lk && lk.grab ? label(F.pickCenter()) : '', innerWidth / 2, innerHeight / 2 + 24); };
     cv.addEventListener('pointerdown', e => {
       A.init();
       if (FT.active) { FT.attack(); FT.mouseHold = true; return; }
       if (!G.S || F.mode !== 'play') return;
+      if (!Main.locked() && Main.lockWanted() && e.pointerType === 'mouse') { Main.lock(); if (!Main.lockFailed) return; }
+      if (Main.locked()) {
+        if (e.button !== 0) return;
+        const S = G.S, hit = F.pickCenter();
+        if (S.phase !== 'forge' || S.hand) { interact(hit); return; }
+        if (hit && hit.action === 'strike' && S.anvil) { lk = { anvil: 1, mv: 0, t0: performance.now() }; clearTimeout(Main.holdTO); Main.holdTO = setTimeout(() => { if (lk && lk.anvil && !lk.grab) { lk.striking = true; G.strike(); G.hold = true; } }, 200); return; }
+        if (hit && hit.action === 'sword' && hit.id) { const w = G.where(hit.id), st = w === 'rack' ? 'rack' : w === 'counter' ? 'tribute' : null; if (st && !F.near(st)) { interact(hit); return; } if (G.grab(hit.id)) { lk = { grab: 1, mv: 0, t0: performance.now() }; Main.dragging = true; } return; }
+        interact(hit); return;
+      }
       const hit = F.pick(e.clientX, e.clientY, 4.5), S = G.S;
       const item = S.phase === 'forge' && hit && ((hit.action === 'sword' && hit.id) || (hit.action === 'strike' && S.anvil)) ? hit : null;
       drag = { id: e.pointerId, x: e.clientX, y: e.clientY, x0: e.clientX, y0: e.clientY, moved: 0, item, t0: performance.now(), held: !!S.hand }; try { cv.setPointerCapture(e.pointerId); } catch (er) { }
@@ -291,6 +311,14 @@
       if (item && item.action === 'strike' && !S.hand) { clearTimeout(Main.holdTO); Main.holdTO = setTimeout(() => { if (drag && drag.item === item && drag.moved < 10 && !G.S.hand) { drag.striking = true; G.strike(); G.hold = true; } }, 230); }
     });
     cv.addEventListener('pointermove', e => {
+      if (Main.locked()) {
+        const sn = .0023 * (G.prefs.sens || 1), mx = e.movementX || 0, my = e.movementY || 0;
+        if (Math.abs(mx) < 400 && Math.abs(my) < 400) F.look(mx * sn, my * sn * (G.prefs.invert ? -1 : 1));
+        if (lk) { lk.mv += Math.abs(mx) + Math.abs(my);
+          if (lk.anvil && !lk.striking && !lk.grab && lk.mv > 30) { clearTimeout(Main.holdTO); if (G.S.anvil && G.grab(G.S.anvil.id)) { lk.grab = 1; Main.dragging = true; } }
+          if (lk.grab) centerHint(); }
+        return;
+      }
       if (drag && e.pointerId === drag.id && drag.item && !drag.held && !drag.striking) {
         drag.moved = Math.hypot(e.clientX - drag.x0, e.clientY - drag.y0);
         if (!drag.grabbed && drag.moved > 10) { clearTimeout(Main.holdTO); const id = drag.item.action === 'strike' ? G.S.anvil && G.S.anvil.id : drag.item.id; if (id && G.grab(id)) { drag.grabbed = true; Main.dragging = true; } else drag.item = null; }
@@ -301,7 +329,15 @@
       else if (!Main.touch && G.S && !FT.active && F.mode === 'play') { const hit = F.pick(e.clientX, e.clientY, 4.5); cv.style.cursor = hit && (hit.action === 'sword' || (hit.action === 'strike' && G.S.anvil)) && !G.S.hand ? 'grab' : label(hit) ? 'pointer' : 'default'; }
     });
     const end = e => {
-      FT.mouseHold = false; if (!drag || e.pointerId !== drag.id) return; const d = drag; drag = null; clearTimeout(Main.holdTO);
+      FT.mouseHold = false;
+      if (Main.locked() || lk) {
+        const l = lk; lk = null; clearTimeout(Main.holdTO); if (!l) return;
+        if (l.striking) { G.hold = false; return; }
+        if (l.anvil && !l.grab) { G.strike(); return; }
+        if (l.grab) { Main.dragging = false; Main.dropHint(''); // held & turned to a target → put it there; a quick click just keeps it in hand
+          if (performance.now() - l.t0 > 280 && l.mv > 40) { const h = F.pickCenter(); if (h && label(h)) interact(h); } }
+        return;
+      } if (!drag || e.pointerId !== drag.id) return; const d = drag; drag = null; clearTimeout(Main.holdTO);
       if (d.striking) { G.hold = false; return; }
       if (d.grabbed) { Main.dragging = false; F.dragEnd(); Main.dropHint(''); cv.style.cursor = 'default'; const h = F.pick(e.clientX, e.clientY, 4.5); if (h && label(h)) interact(h); return; }
       if (d.moved < 10 && e.type === 'pointerup') interact(F.pick(e.clientX, e.clientY, 4.5));
@@ -326,6 +362,7 @@
       '<label class="f">소리 크기<input type="range" id="sVol" min="0" max="1" step=".05" value="' + U.store.get('vol', .7) + '"></label>' +
       '<label class="f">시점 감도<input type="range" id="sSens" min=".3" max="2.5" step=".1" value="' + (p.sens || 1) + '"></label>' +
       '<label class="f chk"><span><input type="checkbox" id="sInv"' + (p.invert ? ' checked' : '') + '> 상하 반전</span></label>' +
+      '<label class="f chk"><span><input type="checkbox" id="sLock"' + (p.lock !== false ? ' checked' : '') + '> 마우스 고정 (클릭하면 커서가 잠기고 마우스로 시점 회전)</span></label>' +
       '<label class="f chk"><span><input type="checkbox" id="sHeat"' + (p.autoHeat ? ' checked' : '') + '> 식으면 연속 타격 멈춤</span></label>' +
       '<label class="f">연속 타격 목표<select id="sTarget">' + [0, 10, 15, 20, 30, 40, 50, 75, 100, 150].map(v => '<option value="' + v + '"' + (p.target === v ? ' selected' : '') + '>' + (v ? '+' + v + '에서 멈춤' : '목표 없음') + '</option>').join('') + '</select></label>' +
       '<label class="f">안전 정지<select id="sSafe">' + [0, 5, 10, 15, 20, 30].map(v => '<option value="' + v + '"' + (p.safeB === v ? ' selected' : '') + '>' + (v ? '파괴 ' + v + '% 초과 시' : '끔') + '</option>').join('') + '</select></label>' +
@@ -336,6 +373,7 @@
     $('#sVol').oninput = e => A.setVol(+e.target.value);
     $('#sSens').oninput = e => { p.sens = +e.target.value; G.savePrefs(); };
     $('#sInv').onchange = e => { p.invert = e.target.checked; G.savePrefs(); };
+    $('#sLock').onchange = e => { p.lock = e.target.checked; G.savePrefs(); Main.lockFailed = false; };
     $('#sHeat').onchange = e => { p.autoHeat = e.target.checked; G.savePrefs(); };
     $('#sQ').onchange = e => { U.store.set('quality', e.target.value); G.toast('그래픽 설정은 새로고침하면 적용돼요'); };
   }

@@ -98,6 +98,7 @@ table.keys{width:100%;border-collapse:collapse;font-size:13px}table.keys td{padd
 #ctx .hb{font-size:11.5px;margin:3px 0}#ctx .hb .bar{margin-top:3px}
 #ctx .cxk{color:var(--dim);font-size:11.5px;margin-top:5px;display:flex;flex-wrap:wrap;gap:4px;align-items:center}#ctx .cxk b{color:var(--ink)}
 #ctx kbd,#ctx .cxk kbd{font-size:10.5px}
+#lockHint{position:absolute;left:50%;top:calc(50% + 34px);transform:translateX(-50%);background:rgba(8,6,5,.78);border:1px solid var(--line2);padding:5px 12px;font-size:12.5px;color:var(--dim);pointer-events:none;display:none;white-space:nowrap}#lockHint b{color:var(--gold)}
 #dropHint{position:fixed;transform:translateX(-50%);background:rgba(8,6,5,.88);border:1px solid var(--gold);color:var(--gold);padding:3px 9px;font-size:12.5px;pointer-events:none;display:none;z-index:40;white-space:nowrap}
 #bGrab{position:absolute;right:calc(18px + var(--sa-r));bottom:calc(160px + var(--sa-b));width:58px;height:58px;border-radius:50%;background:rgba(10,7,6,.75);border:1px solid rgba(201,166,107,.4);font-size:11.5px;font-weight:700;display:none}
 #bAct{white-space:pre-line;line-height:1.15}
@@ -353,6 +354,7 @@ input[type=range]{padding:0;min-height:32px}
   <button id="bGrab" class="pe">들기</button>
   <div id="ctx" class="pe"></div>
   <div id="dropHint"></div>
+  <div id="lockHint">클릭하면 마우스가 고정됩니다 · <b>Esc</b>로 해제</div>
   <div id="sheet" class="pe">
     <div id="sheetHead"><b id="sheetT">상인</b><button id="sheetX" class="btn sm ghost" title="닫기 (Esc)">✕</button></div>
     <div id="panel"></div>
