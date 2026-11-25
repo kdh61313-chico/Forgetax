@@ -79,7 +79,7 @@
       composer.render();
     } else renderer.render(scene, cam);
   }
-  function sheetWidth() { const sh = $('#sheet'); if (!sh || !$('#hud').classList.contains('show') || document.body.classList.contains('bottom')) return 0; return sh.getBoundingClientRect().width; }
+  function sheetWidth() { return 0; }
   function resize() {
     const w = innerWidth, h = innerHeight;
     document.body.classList.toggle('bottom', h > w * 1.05 && !Main.touch);
@@ -165,20 +165,21 @@
     click('#bHow', howTo); click('#bCodex', codex); const bs = $('#bSet'); if (bs) bs.addEventListener('click', () => { A.play('click'); settings(); }); const bs2 = $('#bSet2'); if (bs2) bs2.addEventListener('click', () => { A.play('click'); settings(); });
     click('#bFull', () => { const d = document.documentElement; try { const p = d.requestFullscreen ? d.requestFullscreen() : d.webkitRequestFullscreen && d.webkitRequestFullscreen(); if (p && p.then) p.then(() => { try { screen.orientation.lock('landscape').catch(() => { }); } catch (e) { } }).catch(() => G.toast('이 화면에서는 전체화면을 쓸 수 없어요')); } catch (e) { G.toast('이 화면에서는 전체화면을 쓸 수 없어요'); } });
     click('#bRiv', () => { const r = $('#rivals'); r.classList.toggle('hide'); $('#bRiv').textContent = r.classList.contains('hide') ? '라이벌 보기' : '라이벌 접기'; });
-    U.$$('#nav button').forEach(b => b.addEventListener('click', () => { A.play('click'); if (G.S) G.go(b.dataset.st); }));
-    $('#quests').addEventListener('click', () => { if (G.S) { G.go('quests'); F.walkTo('quests'); } });
+    $('#sheetX').addEventListener('click', () => { A.play('click'); G.closePanel(); });
+    $('#quests').addEventListener('click', () => { if (G.S) F.walkTo('quests', () => G.go('quests')); });
   }
   function howTo() {
     G.modal('<h2 class="h">플레이 방법</h2>' +
-      '<p><b>하루의 흐름</b> — 아침마다 철검 3자루를 받습니다. 검을 모루에 올리고 <b>타격</b>해 강화하세요. 강화할수록 가치가 1.45배씩 오르지만 <b>파괴</b> 확률도 오릅니다. 바칠 검을 공물대에 올리고 <b>종</b>을 치면 하루가 끝납니다.</p>' +
-      '<p><b>타격 결과</b> — 대성공 +2 · 성공 +1 · 유지 · 손상 -1 · 파괴(검 소멸). 모루 패널의 막대가 지금 확률입니다.</p>' +
+      '<p><b>하루의 흐름</b> — 아침마다 이그나르가 식은 철검을 <b>바닥에 던져 줍니다</b>. 검을 주워(E 또는 끌기) <b>화로 가까이 들고 가서 달구고</b>, <b>모루</b>에 올려 두드리세요. 강화할수록 가치가 1.45배씩 오르지만 <b>파괴</b> 확률도 오릅니다. 바칠 검을 <b>공물대</b>에 올리고 <b>종</b>을 치면 하루가 끝납니다.</p>' +
+      '<p><b>검 옮기기</b> — 바닥·거치대·공물대·모루 위의 검은 마우스로 <b>끌어서</b> 원하는 곳에 놓을 수 있어요. 거치대는 칸 제한이 없습니다. 든 검을 상인에게 가져가면 팔 수 있어요.</p>' +
+      '<p><b>타격 결과</b> — 대성공 +2 · 성공 +1 · 유지 · 강화 하락 -1 · 파괴(검 소멸). 모루 앞에 서면 아래쪽에 지금 확률이 보입니다.</p>' +
       '<p><b>타이밍</b> — 움직이는 바늘이 가운데 금빛 칸에 있을 때 치면 <b>완벽</b>: 파괴 확률이 크게 줄고 폭주 게이지가 2칸 찹니다. 빗나가면 위험이 커집니다.</p>' +
-      '<p><b>열기</b> — 칠 때마다 식습니다. 25% 아래로 식으면 대성공이 나오지 않으니 화로에서 다시 달구세요.</p>' +
+      '<p><b>열기</b> — 검은 칠 때마다, 그리고 시간이 지나면 식습니다. <b>식은 검을 두드리면 강화 하락 확률이 크게 오르고</b> 대성공이 사라져요. 열기가 60% 아래로 떨어지면 다시 들고 화로로 가세요. 새빨갛게(90%+) 달궈진 검은 대성공이 조금 더 잘 나옵니다.</p>' +
       '<p><b>불꽃 폭주</b> — 게이지 14칸을 채우면 4초 동안 파괴가 사라집니다. 이때 몰아치세요.</p>' +
       '<p><b>공물</b> — 요구량을 못 채우면 용의 인내심이 1 줄고, 0이 되면 끝. 초과분의 절반은 골드로 돌려받습니다. 골드로 유물·특수 검·도구를 사세요.</p>' +
       '<p><b>결전</b> — 마지막 날 공물을 바친 뒤, 남겨 둔 검으로 이그나르와 싸웁니다. 검 가치가 곧 공격력. +15 최종 형태 검은 고유 스킬을 씁니다. 붉은 표식을 피하세요!</p>' +
       '<p><b>멀티플레이</b> — 방 코드로 모여 각자 자기 대장간에서 같은 날, 같은 상점, 같은 사건으로 경쟁합니다. 하루는 제한시간이 있고, 상인에게 <b>저주</b>를 사서 라이벌을 방해할 수 있어요. 팀전은 팀원에게 검·골드를 보내고 탄원으로 인내심을 채워 줄 수 있고, 결전에서는 팀이 한 마리 용을 함께 잡습니다.</p>' +
-      (Main.touch ? '<p class="muted small">가로 화면 전용 · 3D 화면의 물건을 눌러도 이동/조작할 수 있어요</p>' : '<p class="muted small">단축키: Space 타격 · H 가열 · R 거치대로 · T 공물대로 · B 종 · 1~5 장소 이동</p>'), [{ t: '알겠다', cls: 'pri' }]);
+      (Main.touch ? '<p class="muted small">가로 화면 전용 · 3D 화면의 물건을 눌러도 이동/조작할 수 있어요</p>' : '<p class="muted small">단축키: E 들기/놓기 · Q 내려놓기 · 클릭/Space 타격 · R 거치대 · T 공물대 · B 종 · G 자동 공물 · 1~7 장소 이동 · ? 도움말</p>'), [{ t: '알겠다', cls: 'pri' }]);
   }
   function codex() {
     const ach = U.store.get('ach', {}), sr = U.store.get('seen_relic', {}), stp = U.store.get('seen_type', {});
@@ -189,17 +190,48 @@
       '<h4>유물</h4><div class="swlist">' + ET.RELICS.map(R => '<div class="sw" style="opacity:' + (sr[R.id] ? 1 : .45) + '"><div class="t"><span>' + R.name + '</span><i class="r' + R.r + 't">' + ET.RAR[R.r] + '</i></div><div class="v">' + (sr[R.id] ? R.d : '아직 손에 넣지 못했다') + (R.mp ? ' (멀티 전용)' : '') + '</div></div>').join('') + '</div>', [{ t: '닫기', cls: 'pri' }]);
   }
 
-  const ACT_LABEL = { strike: '모루 · 타격', heat: '화로 · 가열', bell: '종 치기', tribute: '공물대', rack: '이 검을 모루로', rackview: '검 거치대', counter: '공물에서 빼기', shop: '재의 상인', relics: '유물 전시장', quests: '의뢰 게시판', dragon: '이그나르' };
-  function interact(hit) {
+  // what clicking / E does on the thing under the crosshair, given what you hold
+  function label(hit) {
+    const S = G.S; if (!hit || !hit.action || !S || S.phase !== 'forge') return '';
+    const a = hit.action, held = S.hand;
+    const swName = id => { const sw = G.find(id); return sw ? ET.TYPES[sw.type].name + ' +' + sw.lv + ' · ' + U.fmt(G.val(sw)) + ' G' : '검'; };
+    if (held) {
+      if (a === 'strike') return S.anvil ? '모루 위 검과 바꾸기' : '모루에 올려놓기';
+      if (a === 'rackview' || (a === 'sword' && G.where(hit.id) === 'rack')) return '거치대에 걸기';
+      if (a === 'tribute' || (a === 'sword' && G.where(hit.id) === 'counter')) return S.settled ? '' : '공물대에 올리기';
+      if (a === 'sword') return swName(hit.id) + ' · 바꿔 들기';
+      if (a === 'shop') return '상인에게 팔기';
+      if (a === 'heat') return '화로 가까이 들고 있으면 달궈져요';
+      if (a === 'floor') return '바닥에 내려놓기';
+    } else {
+      if (a === 'strike') return S.anvil ? (Main.touch ? '두드리기 · 끌어서 들기' : '클릭 두드리기 · E 들기') : '';
+      if (a === 'sword') return swName(hit.id) + ' · ' + (Main.touch ? '탭해서 들기' : 'E 들기 · 끌어서 옮기기');
+      if (a === 'heat') return '화로 · 검을 들고 오면 달궈짐';
+      if (a === 'rackview') return '검 거치대';
+      if (a === 'tribute') return '공물대';
+    }
+    return { bell: '종 치기 · 공물 바치기', shop: '재의 상인', relics: '유물 전시장', quests: '의뢰 게시판', dragon: '이그나르' }[a] || '';
+  }
+  function interact(hit, opts) {
     if (!hit || !hit.action || !G.S || G.S.phase === 'dead') return;
-    const a = hit.action, open = st => { G.go(st); if (!F.near(st)) F.walkTo(st); };
-    if (a === 'strike') { if (F.near('anvil')) { G.go('anvil'); G.strike(); } else open('anvil'); }
-    else if (a === 'heat') { if (F.near('anvil') || F.near('furnace')) G.heat(); else open('anvil'); }
-    else if (a === 'bell') { if (F.near('tribute')) G.ringBell(); else open('tribute'); }
-    else if (a === 'tribute') open('tribute');
-    else if (a === 'rack' && hit.id) { G.toAnvil(hit.id); }
-    else if (a === 'rackview') open('rack');
-    else if (a === 'counter' && hit.id) G.toRack(hit.id);
+    const S = G.S, a = hit.action, held = S.hand, open = st => F.walkTo(st, () => G.go(st));
+    if (S.phase !== 'forge') { if (a === 'dragon') F.dragonReact('peek'); return; }
+    if (held) {
+      if (a === 'strike') return G.place('anvil');
+      if (a === 'rackview' || (a === 'sword' && G.where(hit.id) === 'rack')) return G.place('rack');
+      if (a === 'tribute' || (a === 'sword' && G.where(hit.id) === 'counter')) return G.place('counter');
+      if (a === 'sword' && hit.id) return G.grab(hit.id);
+      if (a === 'shop') return F.walkTo('shop', () => G.sell(held.id));
+      if (a === 'heat') return F.walkTo('furnace');
+      if (a === 'floor') { const pt = F.hitPoint; if (pt && Math.hypot(pt.x - F.P.x, pt.z - F.P.z) < 3 && !F.blockedAt(pt.x, pt.z)) return G.place('floor', { x: pt.x, z: pt.z, r: F.P.yaw + Math.PI / 2 + (Math.random() - .5) * .6 }); return G.dropHand(); }
+    } else {
+      if (a === 'strike') { if (opts && opts.grab && S.anvil) return G.grab(S.anvil.id); if (F.near('anvil')) G.strike(); else F.walkTo('anvil'); return; }
+      if (a === 'sword' && hit.id) { const w = G.where(hit.id); const st = w === 'rack' ? 'rack' : w === 'counter' ? 'tribute' : null; if (st && !F.near(st)) return F.walkTo(st, () => G.grab(hit.id)); return G.grab(hit.id); }
+      if (a === 'heat') return G.toast('모루 위 검을 들고(E / 끌기) 화로 가까이 가져오면 달궈집니다');
+      if (a === 'rackview') return F.walkTo('rack');
+      if (a === 'tribute') return F.walkTo('tribute');
+    }
+    if (a === 'bell') { if (F.near('tribute')) G.ringBell(); else F.walkTo('tribute', () => G.ringBell()); }
     else if (a === 'shop') open('shop');
     else if (a === 'relics') open('relics');
     else if (a === 'quests') open('quests');
@@ -207,7 +239,7 @@
   }
   Main.interact = interact;
   Main.keyHelp = function () {
-    const rows = [['W A S D', '이동 (Shift 달리기)'], ['마우스 드래그 / ← →', '시선'], ['E · F · 클릭', '조준한 것과 상호작용'], ['Space (꾹)', '두드리기 / 계속 두드리기'], ['H', '가열'], ['R / T', '모루 위 검 → 거치대 / 공물대'], ['G', '자동 공물 선택'], ['B', '종 치기 (공물대 근처)'], ['J', '잡검 일괄 판매'], ['1 ~ 7', '모루·화로·거치대·공물대·상인·전시장·게시판으로 걷기'], ['? / F1', '이 도움말']];
+    const rows = [['W A S D', '이동 (Shift 달리기)'], ['마우스 드래그 / ← →', '시선'], ['E · F', '조준한 검 들기 / 든 검 놓기'], ['검을 끌어서 놓기', '바닥의 검을 끌어 모루·거치대·공물대에 놓기'], ['클릭 · Space (꾹)', '모루 위 검 두드리기 / 계속'], ['Q', '든 검 바닥에 내려놓기'], ['화로', '검을 들고 가까이 가면 달궈짐 · 식은 검은 강화 하락 위험'], ['R / T', '든 검 → 거치대 / 공물대'], ['G', '자동 공물 선택'], ['B', '종 치기 (공물대 근처)'], ['J', '잡검 일괄 판매'], ['1 ~ 7', '모루·화로·거치대·공물대·상인·전시장·게시판으로 걷기'], ['? / F1', '이 도움말']];
     G.modal('<h2 class="h">단축키</h2><table class="keys">' + rows.map(r => '<tr><td><kbd>' + r[0] + '</kbd></td><td>' + r[1] + '</td></tr>').join('') + '</table>', [{ t: '닫기' }]);
   };
   addEventListener('beforeunload', () => { try { G.save && G.save(); } catch (e) { } });
@@ -215,12 +247,14 @@
   let promptT = 0;
   Main.updatePrompt = function () {
     const el = $('#prompt'), xh = $('#xh'); if (!el) return;
-    const show = G.S && !FT.active && F.mode === 'play' && $('#hud').classList.contains('show');
+    const show = G.S && !FT.active && F.mode === 'play' && $('#hud').classList.contains('show') && !Main.dragging;
     xh.style.display = show ? 'block' : 'none'; if (!show) { el.style.display = 'none'; return; }
     const cx = F.centerX(); xh.style.left = cx + 'px'; el.style.left = cx + 'px';
     if (performance.now() - promptT < 90) return; promptT = performance.now();
-    const hit = F.pickCenter(); const lab = hit && ACT_LABEL[hit.action];
-    if (lab) { el.textContent = (Main.touch ? '탭 · ' : 'E · ') + lab; el.style.display = 'block'; xh.classList.add('on'); } else { el.style.display = 'none'; xh.classList.remove('on'); }
+    const hit = F.pickCenter(); const lab = label(hit);
+    if (lab) { el.textContent = lab; el.style.display = 'block'; xh.classList.add('on'); } else { el.style.display = 'none'; xh.classList.remove('on'); }
+    const ab = $('#bAct'); if (ab) { const S = G.S, t = S.hand ? (lab ? '놓기' : '내려\n놓기') : hit && hit.action === 'strike' && S.anvil ? '두드\n리기' : hit && hit.action === 'sword' ? '들기' : '상호\n작용'; if (ab.dataset.t !== t) { ab.dataset.t = t; ab.textContent = t; } }
+    const gb = $('#bGrab'); if (gb) gb.style.display = Main.touch && G.S && G.S.phase === 'forge' && (G.S.hand || (hit && hit.action === 'strike' && G.S.anvil)) ? 'block' : 'none', gb && (gb.textContent = G.S && G.S.hand ? '바닥에' : '들기');
   };
   function bindInput() {
     const I = F.input;
@@ -229,17 +263,18 @@
       const tg = e.target.tagName; if (tg === 'INPUT' || tg === 'SELECT' || FT.active || !G.S) return;
       if ($('#modal').classList.contains('show')) return;
       const k = e.key.toLowerCase(); setK(k, 1);
-      if (k === ' ') { e.preventDefault(); if (!e.repeat) { G.strike(); G.hold = true; } }
-      else if (k === 'e' || k === 'f') interact(F.pickCenter());
-      else if (k === 'h') G.heat();
-      else if (k === 'r' && G.S.anvil) G.toRack(G.S.anvil.id);
-      else if (k === 't' && G.S.anvil) G.toCounter(G.S.anvil.id);
-      else if (k === 'b') { if (F.near('tribute')) G.ringBell(); else { G.go('tribute'); F.walkTo('tribute'); } }
+      if (k === ' ') { e.preventDefault(); if (!e.repeat) { if (G.S.hand) interact(F.pickCenter()); else { G.strike(); G.hold = true; } } }
+      else if (k === 'e' || k === 'f') { const hit = F.pickCenter(); if (!G.S.hand && hit && hit.action === 'strike') interact(hit, { grab: 1 }); else if (G.S.hand && (!hit || !label(hit))) G.dropHand(); else interact(hit); }
+      else if (k === 'q') { if (G.S.hand) G.dropHand(); }
+      else if (k === 'h') { if (G.S.hand) F.walkTo('furnace'); else G.heat(); }
+      else if (k === 'r') { if (G.S.hand) G.place('rack'); }
+      else if (k === 't') { if (G.S.hand) G.place('counter'); }
+      else if (k === 'b') { F.walkTo('tribute', () => G.ringBell()); }
       else if (k === 'g') G.autoTribute();
       else if (k === '?' || k === 'f1') { e.preventDefault(); Main.keyHelp(); }
       else if (k === 'j') G.sellJunk();
-      else if ('1234567'.includes(k) && k) { const st = ['anvil', 'furnace', 'rack', 'tribute', 'shop', 'relics', 'quests'][+k - 1]; G.go(st === 'furnace' ? 'anvil' : st); F.walkTo(st); }
-      else if (k === 'escape') { G.hold = false; }
+      else if ('1234567'.includes(k) && k) { const st = ['anvil', 'furnace', 'rack', 'tribute', 'shop', 'relics', 'quests'][+k - 1]; F.walkTo(st, () => G.go(st)); }
+      else if (k === 'escape') { G.hold = false; G.closePanel(); }
     });
     addEventListener('keyup', e => { const k = e.key.toLowerCase(); setK(k, 0); if (k === ' ') G.hold = false; });
     addEventListener('blur', () => { for (const k in I) I[k] = 0; F.turnL = F.turnR = 0; G.hold = false; });
@@ -249,13 +284,29 @@
       A.init();
       if (FT.active) { FT.attack(); FT.mouseHold = true; return; }
       if (!G.S || F.mode !== 'play') return;
-      drag = { id: e.pointerId, x: e.clientX, y: e.clientY, moved: 0 }; try { cv.setPointerCapture(e.pointerId); } catch (er) { }
+      const hit = F.pick(e.clientX, e.clientY, 4.5), S = G.S;
+      const item = S.phase === 'forge' && hit && ((hit.action === 'sword' && hit.id) || (hit.action === 'strike' && S.anvil)) ? hit : null;
+      drag = { id: e.pointerId, x: e.clientX, y: e.clientY, x0: e.clientX, y0: e.clientY, moved: 0, item, t0: performance.now(), held: !!S.hand }; try { cv.setPointerCapture(e.pointerId); } catch (er) { }
+      // hold the mouse on the anvil sword = keep striking
+      if (item && item.action === 'strike' && !S.hand) { clearTimeout(Main.holdTO); Main.holdTO = setTimeout(() => { if (drag && drag.item === item && drag.moved < 10 && !G.S.hand) { drag.striking = true; G.strike(); G.hold = true; } }, 230); }
     });
     cv.addEventListener('pointermove', e => {
+      if (drag && e.pointerId === drag.id && drag.item && !drag.held && !drag.striking) {
+        drag.moved = Math.hypot(e.clientX - drag.x0, e.clientY - drag.y0);
+        if (!drag.grabbed && drag.moved > 10) { clearTimeout(Main.holdTO); const id = drag.item.action === 'strike' ? G.S.anvil && G.S.anvil.id : drag.item.id; if (id && G.grab(id)) { drag.grabbed = true; Main.dragging = true; } else drag.item = null; }
+        if (drag.grabbed) { F.dragAt(e.clientX, e.clientY); const h = F.pick(e.clientX, e.clientY, 4.5); cv.style.cursor = 'grabbing'; Main.dropHint(label(h), e.clientX, e.clientY); }
+        return;
+      }
       if (drag && e.pointerId === drag.id) { const dx = e.clientX - drag.x, dy = e.clientY - drag.y; drag.x = e.clientX; drag.y = e.clientY; drag.moved += Math.abs(dx) + Math.abs(dy); const sn = .0045 * (G.prefs.sens || 1) * (Main.touch ? 1.25 : 1); F.look(dx * sn, dy * sn * (G.prefs.invert ? -1 : 1)); }
-      else if (!Main.touch && G.S && !FT.active && F.mode === 'play') { const hit = F.pick(e.clientX, e.clientY, 4); cv.style.cursor = hit && hit.action ? 'pointer' : 'grab'; }
+      else if (!Main.touch && G.S && !FT.active && F.mode === 'play') { const hit = F.pick(e.clientX, e.clientY, 4.5); cv.style.cursor = hit && (hit.action === 'sword' || (hit.action === 'strike' && G.S.anvil)) && !G.S.hand ? 'grab' : label(hit) ? 'pointer' : 'default'; }
     });
-    const end = e => { FT.mouseHold = false; if (!drag || e.pointerId !== drag.id) return; const d = drag; drag = null; if (d.moved < 10 && e.type === 'pointerup') interact(F.pick(e.clientX, e.clientY, 4.5)); };
+    const end = e => {
+      FT.mouseHold = false; if (!drag || e.pointerId !== drag.id) return; const d = drag; drag = null; clearTimeout(Main.holdTO);
+      if (d.striking) { G.hold = false; return; }
+      if (d.grabbed) { Main.dragging = false; F.dragEnd(); Main.dropHint(''); cv.style.cursor = 'default'; const h = F.pick(e.clientX, e.clientY, 4.5); if (h && label(h)) interact(h); return; }
+      if (d.moved < 10 && e.type === 'pointerup') interact(F.pick(e.clientX, e.clientY, 4.5));
+    };
+    Main.dropHint = function (txt, x, y) { const el = $('#dropHint'); if (!el) return; if (!txt) { el.style.display = 'none'; return; } el.textContent = txt; el.style.display = 'block'; el.style.left = x + 'px'; el.style.top = (y + 22) + 'px'; };
     cv.addEventListener('pointerup', end); cv.addEventListener('pointercancel', end);
     addEventListener('pointerup', () => { FT.mouseHold = false; });
     // touch movement stick
@@ -266,7 +317,8 @@
       mj.addEventListener('pointermove', e => { if (e.pointerId === id) mv(e); });
       const up = e => { if (e.pointerId !== id) return; id = null; I.jx = I.jy = 0; I.run = 0; mk.style.transform = ''; };
       mj.addEventListener('pointerup', up); mj.addEventListener('pointercancel', up); }
-    const ib = $('#bAct'); if (ib) ib.addEventListener('pointerdown', e => { e.preventDefault(); interact(F.pickCenter()); });
+    const ib = $('#bAct'); if (ib) { ib.addEventListener('pointerdown', e => { e.preventDefault(); const hit = F.pickCenter(); if (!G.S.hand && hit && hit.action === 'strike' && G.S.anvil) { G.strike(); G.hold = true; } else if (G.S.hand && !label(hit)) G.dropHand(); else interact(hit); }); const stop = () => { G.hold = false; }; ib.addEventListener('pointerup', stop); ib.addEventListener('pointercancel', stop); ib.addEventListener('pointerleave', stop); }
+    const gb = $('#bGrab'); if (gb) gb.addEventListener('pointerdown', e => { e.preventDefault(); if (!G.S) return; if (G.S.hand) G.dropHand(); else if (G.S.anvil) G.grab(G.S.anvil.id); });
   }
   function settings() {
     const p = G.prefs;
@@ -274,10 +326,13 @@
       '<label class="f">소리 크기<input type="range" id="sVol" min="0" max="1" step=".05" value="' + U.store.get('vol', .7) + '"></label>' +
       '<label class="f">시점 감도<input type="range" id="sSens" min=".3" max="2.5" step=".1" value="' + (p.sens || 1) + '"></label>' +
       '<label class="f chk"><span><input type="checkbox" id="sInv"' + (p.invert ? ' checked' : '') + '> 상하 반전</span></label>' +
-      '<label class="f chk"><span><input type="checkbox" id="sHeat"' + (p.autoHeat ? ' checked' : '') + '> 식으면 자동 가열</span></label>' +
+      '<label class="f chk"><span><input type="checkbox" id="sHeat"' + (p.autoHeat ? ' checked' : '') + '> 식으면 연속 타격 멈춤</span></label>' +
+      '<label class="f">연속 타격 목표<select id="sTarget">' + [0, 10, 15, 20, 30, 40, 50, 75, 100, 150].map(v => '<option value="' + v + '"' + (p.target === v ? ' selected' : '') + '>' + (v ? '+' + v + '에서 멈춤' : '목표 없음') + '</option>').join('') + '</select></label>' +
+      '<label class="f">안전 정지<select id="sSafe">' + [0, 5, 10, 15, 20, 30].map(v => '<option value="' + v + '"' + (p.safeB === v ? ' selected' : '') + '>' + (v ? '파괴 ' + v + '% 초과 시' : '끔') + '</option>').join('') + '</select></label>' +
       '<label class="f">그래픽<select id="sQ"><option value="auto">자동</option><option value="low">가볍게</option><option value="high">높게</option></select></label>' +
-      '</div><p class="muted small">조작: WASD 이동 · Shift 달리기 · 마우스 드래그 시점 · E/클릭 상호작용 · Space 타격(꾹 누르면 연속) · H 가열 · G 공물 자동 선택 · B 종 · 1~6 장소로 걸어가기</p>', [{ t: '닫기', cls: 'pri' }]);
+      '</div><p class="muted small">조작: WASD 이동 · 마우스 드래그 시점 · 검을 끌어서 옮기기 · E 들기/놓기 · Q 내려놓기 · 클릭/Space 두드리기 · 화로 가까이 들고 가면 가열 · G 공물 자동 선택 · B 종 · 1~7 장소로 걸어가기 · ? 도움말</p>', [{ t: '닫기', cls: 'pri' }]);
     $('#sQ').value = U.store.get('quality', 'auto');
+    $('#sTarget').onchange = e => { p.target = +e.target.value; G.savePrefs(); }; $('#sSafe').onchange = e => { p.safeB = +e.target.value; G.savePrefs(); };
     $('#sVol').oninput = e => A.setVol(+e.target.value);
     $('#sSens').oninput = e => { p.sens = +e.target.value; G.savePrefs(); };
     $('#sInv').onchange = e => { p.invert = e.target.checked; G.savePrefs(); };

@@ -3,7 +3,7 @@
 (function (ET) {
   const U = ET.U, $ = U.$, A = ET.Audio, F = ET.Forge;
   const G = ET.G = { S: null, station: 'anvil', busy: false, timing: { t: 0, pos: .5 }, lastPanelKey: '' };
-  const RACK_BASE = 10; G.rackMax = () => RACK_BASE + 2 * ((G.S && G.S.upg && G.S.upg.rack) || 0);
+  G.rackMax = () => Infinity;
   G.prefs = Object.assign({ autoHeat: true, target: 0, safeB: 0, sens: 1, invert: false }, U.store.get('prefs', {}));
   G.savePrefs = () => U.store.set('prefs', G.prefs);
   const OUT_COL = { gs: 'var(--gs)', s: 'var(--s)', h: 'var(--h)', d: 'var(--d)', b: 'var(--b)' };
@@ -40,7 +40,7 @@
   G.newRun = function (o) {
     const S = G.S = attach({
       v: 3, mode: o.mode || 'solo', seed: o.seed || (Math.random() * 1e9 | 0), contract: o.days || 20, day: 0, lives: 3, maxLives: 3, gold: 150,
-      rack: [], anvil: null, counter: [], relics: [], items: { chip: 0, charm: 0, salt: 0 }, event: 'calm', rushG: 0, rushT: 0, rushes: 0,
+      rack: [], anvil: null, counter: [], floor: [], hand: null, relics: [], items: { chip: 0, charm: 0, salt: 0 }, event: 'calm', rushG: 0, rushT: 0, rushes: 0,
       phoenixUsed: false, wardUsed: false, rustHex: 0, gazeMul: 1, chipNext: false, totalPaid: 0, broken: 0, fails: 0, bestLv: 0,
       shop: null, rerolls: 0, settled: false, endless: false, dragonDmg: 0, dragonKills: 0, fightHP: null, nextId: 1, extraSword: 0,
       phase: 'forge', alive: true, fightDone: false, strikes: 0, combo: 0, upg: { hammer: 0, anvil: 0, forge: 0, rack: 0 }, golden: 0, goldenNow: false
@@ -51,8 +51,9 @@
   };
   G.load = function () { const s = U.store.get('save', null); if (!s || s.v !== 3) return false; G.S = attach(s); G.S.phase = 'forge'; G.afterLoad(); return true; };
   G.save = function () { if (G.S && G.S.mode === 'solo' && G.S.alive) U.store.set('save', G.S); };
-  G.afterLoad = function () { if (G.S && !G.S.quests) { G.S.quests = ET.questsFor(G.S.seed, G.S.day); G.S.dq = { broken: 0 }; } setTimeout(() => { F.syncBoard && F.syncBoard(G.S && G.S.quests); G.renderQuests(); }, 0); const S = G.S; S.golden = 0; S.goldenNow = false; F.enterPlay && F.enterPlay(); G.syncAll(); F.syncAltar(S.shop && S.shop.relics); G.go('anvil'); G.render(); };
-  const sword = (type, lv) => ({ id: 's' + (G.S.nextId++), type: type || 'iron', lv: lv || 0, flat: 0, heat: 100, revived: false });
+  G.afterLoad = function () { if (G.S) { if (!G.S.floor) G.S.floor = []; if (G.S.hand === undefined) G.S.hand = null; (G.S.floor || []).forEach(s => { if (!s.p) s.p = [0, -1.8, 0]; }); } if (G.S && !G.S.quests) { G.S.quests = ET.questsFor(G.S.seed, G.S.day); G.S.dq = { broken: 0 }; } setTimeout(() => { F.syncBoard && F.syncBoard(G.S && G.S.quests); G.renderQuests(); }, 0); const S = G.S; S.golden = 0; S.goldenNow = false; F.enterPlay && F.enterPlay(); G.syncAll(); F.syncAltar(S.shop && S.shop.relics); G.go('anvil'); G.render(); };
+  const sword = (type, lv) => ({ id: 's' + (G.S.nextId++), type: type || 'iron', lv: lv || 0, flat: 0, heat: 0, revived: false });
+  G.newSword = sword;
   G.val = sw => ET.swordValue(sw, G.S);
   G.req = function () {
     const S = G.S; let r = ET.tributeFor(S.day, S.contract);
@@ -60,14 +61,15 @@
     return Math.round(r / 10) * 10;
   };
   G.counterTotal = () => G.S.counter.reduce((a, s) => a + G.val(s), 0);
-  G.allSwords = () => { const S = G.S; return S.rack.concat(S.anvil ? [S.anvil] : [], S.counter); };
+  G.allSwords = () => { const S = G.S; return G.owned().concat(S.counter); };
+  G.owned = () => { const S = G.S; return S.rack.concat(S.floor || [], S.anvil ? [S.anvil] : [], S.hand ? [S.hand] : []); };
 
   G.startDay = function (d) {
     const S = G.S; S.day = d; S.event = ET.eventFor(S.seed, d); S.settled = false; S.phoenixUsed = false; S.wardUsed = false; S.gazeMul = 1; S.rushes = 0; S.rerolls = 0; S.phase = 'forge';
     let n = 3 + (S.has('crucible') ? 1 : 0) + (S.event === 'iron' ? 1 : 0) + S.extraSword; S.extraSword = 0;
-    let lost = 0;
-    for (let i = 0; i < n; i++) { if (S.rack.length + (S.anvil ? 1 : 0) < G.rackMax() + 1 && S.rack.length < G.rackMax()) S.rack.push(sword('iron')); else lost++; }
-    G.allSwords().forEach(s => s.heat = 100);
+    G.allSwords().forEach(s => { if (!ET.TYPES[s.type].noHeat) s.heat = 0; });
+    const fresh = []; for (let i = 0; i < n; i++) fresh.push(sword('iron'));
+    G.dragonThrow(fresh);
     if (S.event === 'gold') S.gold += Math.round(220 * ET.priceScale(d));
     S.shop = G.genShop(d, 0);
     S.quests = ET.questsFor(S.seed, d); S.dq = { broken: 0 }; F.syncBoard && F.syncBoard(S.quests);
@@ -75,9 +77,7 @@
     G.render(true);
     const ev = ET.EVENT[S.event];
     G.banner(d + '일차', ev.name + ' · ' + ev.d);
-    if (lost) G.toast('거치대가 가득 차 검 ' + lost + '자루를 받지 못했다', 'bad');
     if (d === S.contract && !S.endless) setTimeout(() => G.toast('마지막 날! 공물을 바친 뒤 이그나르와 싸울 검을 남겨 두세요', 'bad'), 1600);
-    F.dragonReact('peek');
     G.save(); G.pushNet(true);
   };
 
@@ -112,46 +112,73 @@
   G.buySword = function (i) {
     const S = G.S, o = S.shop.swords[i]; if (!o || o.sold) return; if (!F.near('shop')) return G.needWalk('shop'); const p = G.price(ET.TYPES[o.type].price);
     if (S.gold < p) return G.toast('골드가 부족합니다', 'bad');
-    if (S.rack.length >= G.rackMax()) return G.toast('거치대가 가득 찼습니다', 'bad');
-    S.gold -= p; o.sold = true; S.rack.push(sword(o.type)); A.play('coin'); G.seen('type', o.type); F.syncRack(S.rack); G.toast(ET.TYPES[o.type].name + '을(를) 거치대에 걸었다', 'good'); G.render();
+    S.gold -= p; o.sold = true; G.give(sword(o.type), '상인'); A.play('coin'); G.seen('type', o.type); G.render();
   };
   G.buyItem = function (k) {
     if (!F.near('shop')) return G.needWalk('shop'); const S = G.S, it = ET.ITEMS[k], p = G.price(it.p); if (S.gold < p) return G.toast('골드가 부족합니다', 'bad');
-    if (k === 'chest' && S.rack.length >= G.rackMax()) return G.toast('거치대가 가득 차 상자를 열 수 없습니다', 'bad');
     S.gold -= p; A.play('coin'); if (k === 'chest') { G.openChest(true); } else S.items[k] = (S.items[k] || 0) + 1; G.render();
   };
   G.useChip = function () { const S = G.S; if (S.items.chip > 0 && !S.chipNext) { S.items.chip--; S.chipNext = true; G.toast('숫돌 조각: 다음 타격은 확정 성공', 'good'); G.render(); } };
   G.reroll = function () { const S = G.S, p = G.rerollPrice(); if (S.gold < p) return G.toast('골드가 부족합니다', 'bad'); S.gold -= p; S.rerolls++; const keep = S.shop.items; S.shop = G.genShop(S.day, S.rerolls); S.shop.items = keep; A.play('coin'); F.syncAltar(S.shop.relics); G.render(); };
 
   // ---------- sword moves ----------
-  function take(id) { const S = G.S; let i = S.rack.findIndex(s => s.id === id); if (i >= 0) return S.rack.splice(i, 1)[0]; i = S.counter.findIndex(s => s.id === id); if (i >= 0) return S.counter.splice(i, 1)[0]; if (S.anvil && S.anvil.id === id) { const s = S.anvil; S.anvil = null; return s; } return null; }
-  G.toAnvil = function (id) {
-    const S = G.S; if (!G.canAct()) return; if (S.anvil && S.anvil.id === id) return G.go('anvil');
-    const sw = take(id); if (!sw) return;
-    if (S.anvil) S.rack.push(S.anvil);
-    S.anvil = sw; A.play('click'); A.play('whoosh'); G.syncAll(); G.go('anvil');
+  // where a sword is: 'rack' | 'counter' | 'floor' | 'anvil' | 'hand'
+  G.where = function (id) { const S = G.S; if (S.hand && S.hand.id === id) return 'hand'; if (S.anvil && S.anvil.id === id) return 'anvil'; if (S.rack.some(s => s.id === id)) return 'rack'; if (S.counter.some(s => s.id === id)) return 'counter'; if ((S.floor || []).some(s => s.id === id)) return 'floor'; return null; };
+  G.find = id => G.allSwords().find(s => s.id === id);
+  function take(id) { const S = G.S; let i = S.rack.findIndex(s => s.id === id); if (i >= 0) return S.rack.splice(i, 1)[0]; i = S.counter.findIndex(s => s.id === id); if (i >= 0) return S.counter.splice(i, 1)[0]; i = (S.floor || []).findIndex(s => s.id === id); if (i >= 0) return S.floor.splice(i, 1)[0]; if (S.anvil && S.anvil.id === id) { const s = S.anvil; S.anvil = null; return s; } if (S.hand && S.hand.id === id) { const s = S.hand; S.hand = null; return s; } return null; }
+  G.take = take;
+  // put a sword on the floor at x,z (or in front of the player)
+  G.toFloor = function (sw, pt) { const S = G.S; const q = pt || F.dropPoint(); sw.p = [+q.x.toFixed(2), +q.z.toFixed(2), +(q.r != null ? q.r : Math.random() * 6.28).toFixed(2)]; S.floor.push(sw); };
+  // a new sword arrives (shop / chest / gift): straight into empty hands, otherwise at your feet
+  G.give = function (sw, from) { const S = G.S; if (!S.hand && S.phase === 'forge') { S.hand = sw; G.toast((from ? from + ': ' : '') + ET.TYPES[sw.type].name + ' +' + sw.lv + '을(를) 손에 들었다', 'good'); } else { G.toFloor(sw); G.toast((from ? from + ': ' : '') + ET.TYPES[sw.type].name + ' +' + sw.lv + '을(를) 발밑에 내려놓았다', 'good'); } G.syncAll(); G.render(); };
+  G.dragonThrow = function (list) {
+    const S = G.S; F.dragonReact('toss'); if (list.length) setTimeout(() => G.toast('이그나르가 식은 쇳덩이 ' + list.length + '자루를 바닥에 던졌다 · 주워서 화로에 달구세요'), 1500);
+    list.forEach((sw, i) => { const q = F.floorSpot(); G.toFloor(sw, q); F.throwSword && F.throwSword(sw, .55 + i * .38); });
   };
-  G.toRack = function (id) { const S = G.S; if (!G.canAct()) return; const sw = take(id); if (!sw) return; S.rack.push(sw); A.play('click'); G.syncAll(); G.render(); };
-  G.toCounter = function (id) { const S = G.S; if (!G.canAct() || S.settled) return; const sw = take(id); if (!sw) return; S.counter.push(sw); A.play('click'); G.syncAll(); G.render(); };
+  // pick a sword up (swap with what you hold: the held one goes where the picked one was)
+  G.grab = function (id) {
+    const S = G.S; if (!G.canAct()) return false; const from = G.where(id); if (!from || from === 'hand') return false;
+    if (from === 'counter' && S.settled) return false;
+    const old = from === 'floor' ? S.floor.find(s => s.id === id).p : null;
+    const sw = take(id); const held = S.hand; S.hand = sw;
+    if (held) { if (from === 'anvil') S.anvil = held; else if (from === 'rack') S.rack.push(held); else if (from === 'counter') S.counter.push(held); else G.toFloor(held, old ? { x: old[0], z: old[1], r: old[2] } : null); }
+    if (from === 'anvil') { G.hold = false; }
+    A.play('click'); A.play('whoosh', .5); G.syncAll(); G.render(); return true;
+  };
+  const PLACE_ST = { anvil: 'anvil', rack: 'rack', counter: 'tribute' };
+  // put the held sword somewhere. Walks there first if you are too far.
+  G.place = function (target, pt) {
+    const S = G.S; if (!S.hand || !G.canAct()) return false;
+    const st = PLACE_ST[target];
+    if (st && !F.near(st)) { F.walkTo(st, () => G.place(target)); return false; }
+    if (target === 'counter' && S.settled) return false;
+    const sw = S.hand; S.hand = null;
+    if (target === 'anvil') { if (S.anvil) S.hand = S.anvil; S.anvil = sw; A.play('clang', .35); }
+    else if (target === 'rack') { S.rack.push(sw); A.play('click'); }
+    else if (target === 'counter') { S.counter.push(sw); A.play('coin', .5); }
+    else { G.toFloor(sw, pt); A.play('clang', .2); }
+    G.syncAll(); G.render(); G.pushNet(); return true;
+  };
+  G.dropHand = () => G.place('floor');
+  G.toRack = function (id) { const S = G.S; if (!S || S.phase !== 'forge') return; const sw = take(id); if (!sw) return; S.rack.push(sw); A.play('click'); G.syncAll(); G.render(); };
+  G.toCounter = function (id) { const S = G.S; if (!S || S.phase !== 'forge' || S.settled) return; const sw = take(id); if (!sw) return; S.counter.push(sw); A.play('click'); G.syncAll(); G.render(); };
   G.sell = function (id) {
-    const S = G.S; if (!G.canAct()) return; const sw = S.rack.find(s => s.id === id); if (!sw) return;
+    const S = G.S; if (!G.canAct()) return; const sw = G.find(id); if (!sw || G.where(id) === 'counter') return;
+    const team = S.mode === 'mp' && ET.Net && ET.Net.mode === 'team';
     const g = Math.round(G.val(sw) * (ET.TYPES[sw.type].sell || .4) * (S.has('seal') ? 1.25 : 1));
-    G.modal('<h2 class="h">검 판매</h2><p>' + U.esc(ET.TYPES[sw.type].name) + ' +' + sw.lv + '을(를) <b class="gold">' + U.fmt(g) + ' G</b>에 재의 상인에게 넘길까요?</p><p class="muted small">판 검은 공물로 쓸 수 없습니다.</p>', [{ t: '취소' }, { t: '판매', cls: 'gold', f: () => { take(id); S.gold += g; A.play('coin'); G.qp('sell', 1); G.syncAll(); G.render(); } }]);
+    G.modal('<h2 class="h">검 판매</h2><p>' + U.esc(ET.TYPES[sw.type].name) + ' +' + sw.lv + '을(를) <b class="gold">' + U.fmt(g) + ' G</b>에 재의 상인에게 넘길까요?</p><p class="muted small">판 검은 공물로 쓸 수 없습니다.</p>', [{ t: '취소' }].concat(team ? [{ t: '팀원에게 선물', f: () => setTimeout(() => G.gift(id), 50) }] : []).concat([{ t: '판매', cls: 'gold', f: () => { take(id); S.gold += g; A.play('coin'); G.qp('sell', 1); G.syncAll(); G.render(); } }]));
   };
-  G.syncAll = function () { const S = G.S; F.syncRack(S.rack); F.syncCounter(S.counter); F.setAnvilSword(S.anvil); F.syncRelics && F.syncRelics(S.relics); };
+  G.syncAll = function () { const S = G.S; F.syncRack(S.rack); F.syncFloor && F.syncFloor(S.floor || []); F.setHandSword && F.setHandSword(S.hand); F.syncCounter(S.counter); F.setAnvilSword(S.anvil); F.syncRelics && F.syncRelics(S.relics); };
   // upgrades (gold sink that makes the late game snowball)
   G.upPrice = k => { const S = G.S, U0 = ET.UPGRADES[k]; return G.price(U0.p * Math.pow(1.45, S.upg[k] || 0)); };
   G.buyUp = function (k) { const S = G.S, U0 = ET.UPGRADES[k]; if ((S.upg[k] || 0) >= U0.max) return; if (!F.near('shop')) return G.needWalk('shop'); const p = G.upPrice(k); if (S.gold < p) return G.toast('골드가 부족합니다', 'bad'); S.gold -= p; S.upg[k] = (S.upg[k] || 0) + 1; A.play('coin'); A.play('clang', .6); G.toast(U0.name + ' ' + S.upg[k] + '단계', 'good'); G.render(); };
   let walkHintT = 0;
-  G.needWalk = function (st) { if (performance.now() - walkHintT > 1500) { walkHintT = performance.now(); const n = { anvil: '모루', furnace: '화로', tribute: '공물대', shop: '상인', rack: '거치대', relics: '유물 전시장' }[st]; G.toast(n + ' 가까이 가야 합니다 · [걸어가기]를 누르면 자동으로 이동해요'); } return false; };
+  G.needWalk = function (st) { if (performance.now() - walkHintT > 1500) { walkHintT = performance.now(); const n = { anvil: '모루', furnace: '화로', tribute: '공물대', shop: '상인', rack: '거치대', relics: '유물 전시장', quests: '의뢰 게시판' }[st]; G.toast(n + ' 가까이 가야 합니다'); } return false; };
   G.canAct = () => G.S && G.S.phase === 'forge' && !G.busy;
 
   // ---------- heat ----------
-  G.heat = function () {
-    const S = G.S; if (!S.anvil || G.heating || !G.canAct()) return; if (!F.near('anvil') && !F.near('furnace')) return G.needWalk('anvil'); if (S.anvil.heat >= 99) return;
-    G.heating = true; F.heating = true; A.play('fire'); A.play('whoosh'); G.render();
-    setTimeout(() => { G.heating = false; F.heating = false; if (S.anvil) { S.anvil.heat = 100; F.setAnvilSword(S.anvil); } G.render(); }, Math.max(350, 850 - (S.upg.forge || 0) * 80));
-  };
+  G.heat = function () { G.toast('검을 손에 들고 화로 가까이 가면 달궈집니다'); };
+  G.coolK = () => Math.pow(.8, G.S.upg.rack || 0);
 
   // ---------- timing ----------
   G.timingZones = function () {
@@ -161,7 +188,9 @@
 
   // ---------- strike ----------
   G.strike = function () {
-    const S = G.S; if (!S || !S.anvil || G.busy || G.heating || S.phase !== 'forge') return;
+    const S = G.S; if (!S || G.busy || S.phase !== 'forge') return;
+    if (S.hand) { G.hold = false; return G.place('anvil'); }
+    if (!S.anvil) { G.hold = false; return; }
     if (F.hammerAnim > 0) return;
     if (!F.near('anvil')) { G.hold = false; return G.needWalk('anvil'); }
     const q = G.timingQ(); G.busy = true;
@@ -236,9 +265,9 @@
   };
   G.settle = function (auto) {
     const S = G.S; if (!S || S.settled) return; S.settled = true; S.phase = 'settle';
-    G.busy = false; G.heating = false; F.heating = false; S.rushT = 0; F.rushFx(false);
+    G.busy = false; G.hold = false; G.heating = false; F.heating = false; S.rushT = 0; F.rushFx(false); G.closePanel();
     const tot = G.counterTotal(), req = G.req();
-    F.bellRing(); A.play('bell'); G.go('tribute');
+    F.bellRing(); A.play('bell');
     setTimeout(() => {
       G.questSettle(); S.totalPaid += tot; F.tributeFly();
       if (tot >= req) {
@@ -266,7 +295,7 @@
   // ---------- fight ----------
   G.prepareFight = function (extra) {
     const S = G.S; S.phase = 'prefight'; G.render(true);
-    const list = S.rack.concat(S.anvil ? [S.anvil] : []).sort((a, b) => G.val(b) - G.val(a));
+    const list = G.owned().sort((a, b) => G.val(b) - G.val(a));
     const hp = S.fightHP != null ? S.fightHP : G.dragonMaxHP();
     S.fightHP = hp;
     F.dragonReact('angry'); F.setStation('dragon');
@@ -296,7 +325,7 @@
       G.modal('<h2 class="h">자유!</h2><p>이그나르가 쓰러졌다. ' + S.day + '일간의 계약이 끝났다.</p>' + statsHTML() + '<p class="muted small">무한 단조: 대장간에 남아 매일 30%씩 늘어나는 공물을 계속 바치며 점수를 올릴 수 있습니다. 용은 더 강해져 돌아옵니다.</p>', [{ t: '타이틀로', f: () => G.toTitle(true) }, { t: '무한 단조 계속', cls: 'pri', f: () => { S.endless = true; S.fightHP = null; S.phase = 'forge'; F.setStation('anvil'); G.startDay(S.day + 1); } }], true);
     } else {
       if (S.mode === 'mp') {
-        const left = S.rack.length + (S.anvil ? 1 : 0);
+        const left = G.owned().length;
         if (left && r.reason !== 'time') return G.prepareFight('다시 일어선다 — 다른 검을 들어라');
         S.phase = 'fightdone'; S.fightDone = true; G.pushNet(true); G.render(true); ET.Net.checkFlow(); return;
       }
@@ -329,7 +358,7 @@
   G.receive = function (a, fromName) {
     const S = G.S; if (!S || !S.alive) return;
     const nm = U.esc(fromName || '누군가');
-    if (a.k === 'gift') { if (S.rack.length >= G.rackMax()) { G.toast(nm + '의 선물을 받을 자리가 없다', 'bad'); return; } const s = sword(a.d.t, a.d.l); s.flat = a.d.f || 0; S.rack.push(s); F.syncRack(S.rack); G.toast(nm + '이(가) ' + U.esc(ET.TYPES[a.d.t] ? ET.TYPES[a.d.t].name : '검') + ' +' + (a.d.l | 0) + '을(를) 보냈다', 'good'); A.play('coin'); G.render(); return; }
+    if (a.k === 'gift') { const s = sword(ET.TYPES[a.d.t] ? a.d.t : 'iron', a.d.l | 0); s.flat = a.d.f || 0; G.toFloor(s); G.syncAll(); G.toast(nm + '이(가) ' + U.esc(ET.TYPES[s.type].name) + ' +' + s.lv + '을(를) 보냈다 · 발밑에 놓였다', 'good'); A.play('coin'); G.render(); return; }
     if (a.k === 'gold') { S.gold += Math.max(0, a.d.n | 0); G.toast(nm + '이(가) ' + U.fmt(a.d.n | 0) + ' G를 보냈다', 'good'); A.play('coin'); G.render(); return; }
     if (a.k === 'plea') { S.lives = Math.min(S.maxLives, S.lives + 1); G.toast(nm + '의 탄원으로 인내심 +1', 'good'); G.render(); return; }
     if (a.k === 'steal') { S.gold += Math.max(0, a.d.n | 0); G.toast('까마귀가 ' + U.fmt(a.d.n | 0) + ' G를 물어왔다', 'good'); G.render(); return; }
@@ -339,7 +368,7 @@
     if (S.has('ward') && !S.wardUsed && !a.refl) { S.wardUsed = true; ET.Net.sendAction(a.from, a.k, a.d, true); G.toast('거울 방패가 ' + C.name + '을(를) ' + nm + '에게 되돌렸다!', 'good'); return; }
     A.play('curse'); F.flashScreen('rgba(140,40,200,.35)');
     if (a.k === 'rust') S.rustHex = 6;
-    if (a.k === 'chill') { if (S.anvil) { S.anvil.heat = 0; F.setAnvilSword(S.anvil); } S.rushG = 0; }
+    if (a.k === 'chill') { if (S.anvil) { S.anvil.heat = 0; F.setAnvilSword(S.anvil); } if (S.hand) S.hand.heat = 0; S.rushG = 0; }
     if (a.k === 'raven') { const n = Math.round(S.gold * .15); S.gold -= n; ET.Net.sendAction(a.from, 'steal', { n }); }
     if (a.k === 'gaze' && !S.settled) S.gazeMul *= 1.12;
     G.toast((a.refl ? '반사된 ' : '') + nm + '의 ' + C.name + '! ' + C.d.replace('상대의 ', '').replace('상대 ', ''), 'curse');
@@ -352,7 +381,7 @@
     U.$$('#modalCard [data-t]').forEach(b => b.onclick = () => { if (S.gold < p) return; S.gold -= p; ET.Net.sendAction(b.dataset.t, k, {}); G.ach('curse'); A.play('curse'); G.toast(C.name + ' 시전!', 'curse'); G.closeModal(); G.render(); });
   };
   G.gift = function (id) {
-    const S = G.S, sw = S.rack.find(s => s.id === id); if (!sw) return; const mates = ET.Net.targets('mate'); if (!mates.length) return G.toast('선물할 팀원이 없다', 'bad');
+    const S = G.S, sw = G.find(id); if (!sw) return; const mates = ET.Net.targets('mate'); if (!mates.length) return G.toast('선물할 팀원이 없다', 'bad');
     G.modal('<h2 class="h">검 선물</h2><p>' + U.esc(ET.TYPES[sw.type].name) + ' +' + sw.lv + '을(를) 누구에게?</p><div class="slots">' + mates.map(f => '<button class="slot btn ghost" data-t="' + U.esc(f.id) + '" style="--tc:' + f.col + '"><span>' + U.esc(f.name) + '</span><span class="muted small">' + U.fmt(f.paid || 0) + ' / ' + U.fmt(f.req || 0) + '</span></button>').join('') + '</div>', [{ t: '취소' }]);
     U.$$('#modalCard [data-t]').forEach(b => b.onclick = () => { const s = take(id); if (!s) return; ET.Net.sendAction(b.dataset.t, 'gift', { t: s.type, l: s.lv, f: s.flat }); G.syncAll(); G.closeModal(); G.toast('검을 보냈다', 'good'); G.render(); });
   };
@@ -386,7 +415,10 @@
   G.tierCol = lv => TIER_COL[ET.tierOf(lv)];
 
   // ---------- rendering ----------
-  G.go = function (st, auto) { if (!auto) G.manualT = performance.now(); if (st === 'furnace') st = 'anvil'; G.station = st; U.$$('#nav button').forEach(b => b.classList.toggle('on', b.dataset.st === st)); G.render(true); };
+  const PANEL_T = { shop: '재의 상인', quests: '의뢰 게시판', relics: '유물 전시장' };
+  G.go = function (st) { if (PANEL_T[st]) G.openPanel(st); else G.closePanel(); };
+  G.openPanel = function (st) { if (!G.S || G.S.phase !== 'forge') return; G.panel = G.station = st; $('#sheetT').textContent = PANEL_T[st]; $('#sheet').classList.add('open'); renderPanel(true); };
+  G.closePanel = function () { if (!G.panel) return; G.panel = null; $('#sheet').classList.remove('open'); $('#tip').style.display = 'none'; };
   G.render = function (force) {
     const S = G.S; if (!S) return; if (force) G.renderQuests();
     // top
@@ -399,8 +431,8 @@
     $('#goldTxt').textContent = U.fmt(S.gold) + ' G';
     $('#relicStrip').innerHTML = S.relics.map(id => { const R = ET.RELIC[id]; return '<button class="rel r' + R.r + '" data-rel="' + id + '">' + G.relicSVG(R.tag, R.r === 3 ? '#d6aa5a' : R.r === 2 ? '#9ec0e0' : '#c9a66b') + '</button>'; }).join('') + (S.rustHex > 0 ? '<div class="rel" title="녹의 저주" style="border-color:#b45cff">' + G.relicSVG('shield', '#b45cff') + '</div>' : '');
     U.$$('#relicStrip [data-rel]').forEach(b => { const R = ET.RELIC[b.dataset.rel]; tipOn(b, '<b>' + U.esc(R.name) + '</b> <span class="r' + R.r + 't">' + ET.RAR[R.r] + '</span><br>' + U.esc(R.d) + '<br><span class="muted small">눌러서 버리기</span>'); b.onclick = () => G.dropRelic(R.id); });
-    const nb = $('#nav [data-st="tribute"]'); nb.querySelector('.badge') && nb.querySelector('.badge').remove(); if (S.counter.length) nb.insertAdjacentHTML('beforeend', '<span class="badge">' + S.counter.length + '</span>');
-    renderPanel(force);
+    if (G.panel) renderPanel(force);
+    G.renderHud();
   };
   function tipOn(el, html) { const t = $('#tip'); el.onmouseenter = e => { t.innerHTML = html; t.style.display = 'block'; const r = el.getBoundingClientRect(); t.style.left = Math.min(innerWidth - 270, r.left) + 'px'; t.style.top = (r.bottom + 6) + 'px'; }; el.onmouseleave = () => t.style.display = 'none'; }
   function oddsHTML(o) { return '<div class="odds">' + ['gs', 's', 'h', 'd', 'b'].map(k => '<div style="flex-basis:' + (o[k] * 100).toFixed(1) + '%;background:' + OUT_COL[k] + '">' + (o[k] > .06 ? Math.round(o[k] * 100) + '%' : '') + '</div>').join('') + '</div><div class="legend">' + ['gs', 's', 'h', 'd', 'b'].map(k => '<span style="--c:' + OUT_COL[k] + '">' + OUT_NAME[k] + ' ' + (o[k] * 100).toFixed(1) + '%</span>').join('') + '</div>'; }
@@ -414,11 +446,50 @@
     if (S.phase === 'prefight') return '<h3 class="h">결전 준비</h3><p class="muted">싸울 검을 고르세요.</p><button class="btn pri" id="pfAgain">검 고르기</button>';
     return '';
   }
+  // ---- context HUD (bottom centre): what you hold / the anvil / the tribute table ----
+  G.ctxMode = function () {
+    const S = G.S; if (!S) return ''; if (S.phase !== 'forge') return waitHTML() ? 'wait' : '';
+    if (S.hand) return 'hand'; if (S.anvil && F.near('anvil')) return 'anvil'; if (F.near('tribute')) return 'tribute'; if (S.anvil && F.dist('anvil') < 3.2) return 'anvil'; return '';
+  };
+  const heatTxt = sw => ET.TYPES[sw.type].noHeat ? '<b style="color:#ff9a40">식지 않는 검</b>' : sw.heat >= 90 ? '<b style="color:#ffb060">새빨갛게 달궈짐</b>' : sw.heat >= 60 ? '달궈짐' : sw.heat >= 25 ? '<b style="color:#d8a060">식는 중 · 강화 하락 위험 ↑</b>' : '<b style="color:var(--blood)">차갑다! 강화 하락 위험 큼</b>';
+  G.renderHud = function () {
+    const S = G.S, el = $('#ctx'); if (!el) return; const mode = G.ctxMode(); G.lastCtx = mode;
+    el.className = 'pe' + (mode ? ' on m-' + mode : '');
+    if (!mode) { el.innerHTML = ''; return; }
+    let h = '';
+    if (mode === 'wait') { h = waitHTML(); }
+    else if (mode === 'hand') {
+      const sw = S.hand, nearF = F.nearFurnace && F.nearFurnace();
+      h = '<div class="cxh"><span class="tb" style="--tc:' + G.tierCol(sw.lv) + '"></span><b>' + U.esc(ET.stageName(sw.lv, sw.type)) + '</b> <span class="lv">+' + sw.lv + '</span><span class="v">' + U.fmt(G.val(sw)) + ' G</span></div>' +
+        '<div class="hb"><span>열기 ' + heatTxt(sw) + '</span><div class="bar"><i id="heatBar" style="width:' + sw.heat + '%"></i></div></div>' +
+        '<div class="cxk">' + (nearF && sw.heat < 100 && !ET.TYPES[sw.type].noHeat ? '<b style="color:#ffb060">화로에서 달구는 중…</b>' : sw.heat < 60 && !ET.TYPES[sw.type].noHeat ? '<b>화로 가까이</b> 들고 가면 달궈져요' : '<b>모루</b>를 클릭해 올려놓기') + ' · 거치대·공물대 클릭: 놓기 · 상인: 판매' + (Main_touch() ? '' : ' · <kbd>Q</kbd> 내려놓기') + '</div>';
+    } else if (mode === 'anvil') {
+      const sw = S.anvil, T = ET.TYPES[sw.type], o = ET.odds(sw, S, 'good'), M = ET.masteryOf(S.strikes), nxt = ET.nextStage(sw.lv), chain = S.has('chain'), cb = ET.comboBonus(S.combo || 0, M, chain);
+      h = '<div class="cxh"><span class="tb" style="--tc:' + G.tierCol(sw.lv) + '"></span><b>' + U.esc(ET.stageName(sw.lv, sw.type)) + '</b> <span class="lv">+' + sw.lv + '</span><span class="v">' + U.fmt(G.val(sw)) + ' G</span></div>' +
+        '<div class="odds sm">' + ['gs', 's', 'h', 'd', 'b'].map(k => '<div style="flex-basis:' + (o[k] * 100).toFixed(1) + '%;background:' + OUT_COL[k] + '" title="' + OUT_NAME[k] + '">' + (o[k] > .07 ? Math.round(o[k] * 100) + '%' : '') + '</div>').join('') + '</div>' +
+        '<div class="statline"><span>연타 <b>' + (S.combo || 0) + '</b>' + (cb ? ' <i>+' + cb + '강</i>' : '') + '</span><span>숙련 <b>' + M + '</b></span><span>' + (nxt != null ? '+' + nxt + ' 진화' : '최종 진화') + '</span>' + (S.golden > 0 ? '<span class="goldtag">황금 불꽃!</span>' : '') + (S.rustHex > 0 ? '<span style="color:#c88cff">녹의 저주 ' + S.rustHex + '</span>' : '') + '</div>' +
+        '<div id="timing"><div class="good" id="tg"></div><div class="perf" id="tp"></div><div class="needle" id="tn"></div><div class="lbl" id="tl">타이밍</div></div>' +
+        '<div class="bars"><div class="hb"><span>열기 ' + heatTxt(sw) + '</span><div class="bar"><i id="heatBar" style="width:' + sw.heat + '%"></i></div></div><div>불꽃 폭주<div class="pips' + (S.rushT > 0 ? ' rush' : '') + '" id="pips">' + Array.from({ length: 14 }, (_, i) => '<b class="' + (i < S.rushG ? 'on' : '') + '"></b>').join('') + '</div></div></div>' +
+        '<div class="cxk">' + (Main_touch() ? '<b>두드리기</b> 버튼 (꾹 누르면 연속)' : '<b>클릭 · Space</b> 두드리기 (꾹 누르면 연속)') + ' · 검을 끌어서 옮기기' + (S.items.chip ? ' · <button class="btn sm" id="bChip"' + (S.chipNext ? ' disabled' : '') + '>숫돌 ' + S.items.chip + '</button>' : '') + '</div>';
+    } else if (mode === 'tribute') {
+      const tot = G.counterTotal(), req = G.req();
+      h = '<div class="cxh"><b>공물대</b><span class="v ' + (tot >= req ? 'ok' : '') + '">' + U.fmt(tot) + ' / ' + U.fmt(req) + ' G</span></div>' +
+        '<div class="cxk">검을 들고 공물대를 클릭해 올리기 · 올린 검을 클릭하면 다시 들기 · <b>종</b>을 치면 바칩니다</div>' +
+        '<div class="row" style="margin-top:6px"><button class="btn sm" id="bAutoT">최소 가치로 자동 선택 <kbd>G</kbd></button><button class="btn sm ' + (tot >= req ? 'gold' : 'pri') + '" id="bBell">종 치기 <kbd>B</kbd></button>' + (S.endless && S.dragonKills ? '<button class="btn sm ghost" id="bRematch">재대결</button>' : '') + '</div>' +
+        '<p class="muted small" style="margin:6px 0 0">초과분의 ' + (S.has('tooth') ? 90 : 50) + '%는 골드로 환급 · 내일 공물 ' + U.fmt(ET.tributeFor(S.day + 1)) + ' G · 내일 「' + ET.EVENT[ET.eventFor(S.seed, S.day + 1)].name + '」</p>';
+    }
+    el.innerHTML = h;
+    const bind = (id, f) => { const e = $('#' + id); if (e) e.onclick = ev => { ev.stopPropagation(); A.play('click'); f(); }; };
+    bind('bChip', () => G.useChip()); bind('bAutoT', () => G.autoTribute()); bind('bBell', () => G.ringBell()); bind('bRematch', () => G.rematch()); bind('pfAgain', () => G.prepareFight());
+    G.layoutTiming();
+  };
+  const Main_touch = () => !!(ET.Main && ET.Main.touch);
   function renderPanel(force) {
     const S = G.S, P = $('#panel'), st = G.station;
-    if (S.phase !== 'forge') { const h = waitHTML(); if (P.dataset.k !== 'w' + S.phase || force) { P.innerHTML = h; P.dataset.k = 'w' + S.phase; const b = $('#pfAgain'); if (b) b.onclick = () => G.prepareFight(); } return; }
+    if (S.phase !== 'forge') return G.closePanel();
     P.dataset.k = st;
     let h = '';
+    if (st === 'shop') h = '<p class="muted small" style="margin:0 0 6px">검을 들고 상인을 클릭하면 팔 수 있어요.</p>';
     if (st === 'anvil' || st === 'furnace') {
       const sw = S.anvil;
       if (!sw) {
@@ -455,7 +526,7 @@
         '<p class="muted small">단련 상태 · 망치 ' + (S.upg.hammer || 0) + ' · 모루 ' + (S.upg.anvil || 0) + ' · 화로 ' + (S.upg.forge || 0) + ' · 거치대 ' + (S.upg.rack || 0) + ' · 숙련 ' + ET.masteryOf(S.strikes) + '</p>';
     } else if (st === 'shop') {
       const tab = G.shopTab || 'relic', mp = S.mode === 'mp';
-      h = (F.near('shop') ? '' : '<button class="btn" data-walk="shop" style="width:100%;margin-bottom:8px">상인에게 걸어가기</button>') + '<div class="swhead"><h3 class="h">재의 상인</h3><button class="btn sm ghost" id="bReroll">새로고침 · ' + U.fmt(G.rerollPrice()) + ' G</button></div><div class="seg shoptabs" style="margin-top:8px">' + [['relic', '유물'], ['up', '단련'], ['sword', '검'], ['item', '도구']].concat(mp ? [['curse', '저주']] : []).map(([k, n]) => '<button data-tab="' + k + '" class="' + (tab === k ? 'on' : '') + '">' + n + '</button>').join('') + '</div>';
+      h += '<div class="swhead"><h3 class="h">물건</h3><button class="btn sm ghost" id="bReroll">새로고침 · ' + U.fmt(G.rerollPrice()) + ' G</button></div><div class="seg shoptabs" style="margin-top:8px">' + [['relic', '유물'], ['up', '단련'], ['sword', '검'], ['item', '도구']].concat(mp ? [['curse', '저주']] : []).map(([k, n]) => '<button data-tab="' + k + '" class="' + (tab === k ? 'on' : '') + '">' + n + '</button>').join('') + '</div>';
       if (tab === 'relic') h += S.shop.relics.map((o, i) => { const R = ET.RELIC[o.id], p = G.price(R.p); return '<div class="offer"><div class="ic">' + G.relicSVG(R.tag, R.r === 3 ? '#d6aa5a' : R.r === 2 ? '#9ec0e0' : '#c9a66b') + '</div><div><div class="n">' + U.esc(R.name) + '<small class="r' + R.r + 't">' + ET.RAR[R.r] + '</small></div><div class="d">' + U.esc(R.d) + '</div></div><button class="btn sm ' + (o.sold ? 'ghost' : 'gold') + '" data-br="' + i + '"' + (o.sold || S.gold < p ? ' disabled' : '') + '>' + (o.sold ? '판매됨' : U.fmt(p) + ' G') + '</button></div>'; }).join('') + '<p class="muted small">유물 ' + S.relics.length + ' / ' + ET.MAX_RELICS + '칸 · 상점은 매일 바뀝니다</p>';
       if (tab === 'up') h += Object.keys(ET.UPGRADES).map(k => { const u0 = ET.UPGRADES[k], lv = S.upg[k] || 0, mx = lv >= u0.max, p = mx ? 0 : G.upPrice(k); return '<div class="offer"><div class="ic">' + G.relicSVG(k === 'hammer' ? 'hammer' : k === 'anvil' ? 'anvil' : k === 'forge' ? 'bellows' : 'chain', '#c9a66b') + '</div><div><div class="n">' + u0.name + ' <small>' + lv + ' / ' + u0.max + '</small></div><div class="d">' + u0.d + '</div></div><button class="btn sm gold" data-up="' + k + '"' + (mx || S.gold < p ? ' disabled' : '') + '>' + (mx ? '최대' : U.fmt(p) + ' G') + '</button></div>'; }).join('') + '<p class="muted small">단련은 계약이 끝날 때까지 유지됩니다. 후반으로 갈수록 강화가 폭발적으로 쉬워져요.</p>';
       if (tab === 'sword') h += S.shop.swords.map((o, i) => { const T = ET.TYPES[o.type], p = G.price(T.price); return '<div class="offer"><div class="ic">' + swordSVG({ type: o.type, lv: 0 }) + '</div><div><div class="n">' + U.esc(T.name) + (T.rare ? '<small class="r3t">희귀</small>' : '') + '</div><div class="d">' + U.esc(T.desc) + ' 기본가 ' + T.base + ' G · 최종 고유기 「' + T.abName + '」</div></div><button class="btn sm ' + (o.sold ? 'ghost' : 'gold') + '" data-bs="' + i + '"' + (o.sold || S.gold < p ? ' disabled' : '') + '>' + (o.sold ? '판매됨' : U.fmt(p) + ' G') + '</button></div>'; }).join('');
@@ -506,44 +577,57 @@
     F.syncBoard && F.syncBoard(S.quests);
   };
   G.openChest = function (free) {
-    const S = G.S; if (S.rack.length >= G.rackMax()) { S.gold += free ? 0 : G.price(ET.ITEMS.chest.p); return G.toast('거치대가 가득 차 상자를 열 수 없어 환불했다', 'bad'); }
+    const S = G.S;
     const r = Math.random(), keys = ET.TYPE_KEYS.filter(k => k !== 'iron');
     let t = keys[Math.floor(Math.random() * keys.length)]; if (ET.TYPES[t].rare && Math.random() < .5) t = keys[Math.floor(Math.random() * keys.length)];
-    const lv = Math.floor(Math.pow(r, 2.2) * (4 + S.day * 1.4)); const sw2 = sword(t, lv); S.rack.push(sw2); G.seen('type', t);
-    F.syncRack(S.rack); A.play('gs'); G.float('상자 개봉!', 'var(--gs)', U.esc(ET.stageName(lv, t)) + ' +' + lv);
+    const lv = Math.floor(Math.pow(r, 2.2) * (4 + S.day * 1.4)); const sw2 = sword(t, lv); G.seen('type', t); G.give(sw2, '상자'); A.play('gs'); G.float('상자 개봉!', 'var(--gs)', U.esc(ET.stageName(lv, t)) + ' +' + lv);
   };
   G.sellJunk = function () {
-    const S = G.S, req = G.req(); const keep = S.rack.slice().sort((a, b) => G.val(b) - G.val(a)).slice(0, 3).map(x => x.id);
-    const junk = S.rack.filter(x => !keep.includes(x.id) && G.val(x) < req * .08); if (!junk.length) return G.toast('팔 만한 잡검이 없다');
+    const S = G.S, req = G.req(); const pool = S.rack.concat(S.floor), keep = pool.slice().sort((a, b) => G.val(b) - G.val(a)).slice(0, 3).map(x => x.id);
+    const junk = pool.filter(x => !keep.includes(x.id) && G.val(x) < req * .08); if (!junk.length) return G.toast('팔 만한 잡검이 없다');
     const total = junk.reduce((a, x) => a + Math.round(G.val(x) * (ET.TYPES[x.type].sell || .4) * (S.has('seal') ? 1.25 : 1)), 0);
     G.modal('<h2 class="h">잡검 일괄 판매</h2><p>오늘 공물의 8%도 안 되는 검 ' + junk.length + '자루를 <b class="gold">' + U.fmt(total) + ' G</b>에 팝니다. (가장 비싼 3자루는 남김)</p>', [{ t: '취소' }, { t: '판매', cls: 'gold', f: () => { junk.forEach(x => take(x.id)); S.gold += total; G.qp('sell', junk.length); A.play('coin'); G.syncAll(); G.render(); } }]);
   };
   G.autoTribute = function () {
     const S = G.S; if (!G.canAct() || S.settled) return; const req = G.req();
-    const pool = S.rack.concat(S.counter); S.counter.slice().forEach(x => G.toRack(x.id));
+    const pool = S.rack.concat(S.floor, S.counter); S.counter.slice().forEach(x => G.toRack(x.id));
     const byV = pool.slice().sort((a, b) => G.val(a) - G.val(b));
     const single = byV.find(x => G.val(x) >= req); let pick = [];
     if (single) pick = [single]; else { let t = 0; for (const x of byV.slice().reverse()) { if (t >= req) break; pick.push(x); t += G.val(x); } for (let i = pick.length - 1; i >= 0; i--) { const v = G.val(pick[i]); if (t - v >= req) { t -= v; pick.splice(i, 1); } } }
-    pick.forEach(x => G.toCounter(x.id));
+    pick.forEach(x => G.toCounter(x.id)); if (pick.length && !F.near('tribute')) F.walkTo('tribute');
     G.toast(pick.length ? '검 ' + pick.length + '자루를 골랐다 · ' + U.fmt(G.counterTotal()) + ' / ' + U.fmt(req) : '고를 검이 없다', pick.length && G.counterTotal() >= req ? 'good' : 'bad');
   };
   // per-frame
   G.tick = function (dt) {
     const S = G.S; if (!S) return;
     if (S.golden > 0) { S.golden -= dt; if (S.golden <= 0) { S.golden = 0; F.goldenFx && F.goldenFx(false); } }
-    if (S.phase === 'forge' && S.anvil) {
-      const sw = S.anvil, nearA = F.near('anvil');
-      if (G.prefs.autoHeat && nearA && sw.heat < 25 && !G.heating && !G.busy && !(F.hammerAnim > 0)) G.heat();
-      if (G.hold && !G.busy && !G.heating && !(F.hammerAnim > 0)) {
-        if (!nearA) G.hold = false;
+    if (S.phase === 'forge') {
+      // heat: carry a sword to the furnace to heat it; everything slowly cools
+      const ck = G.coolK(), hs = S.hand, nearF = F.nearFurnace && F.nearFurnace();
+      const heatNow = !!(hs && nearF && !ET.TYPES[hs.type].noHeat && hs.heat < 100);
+      if (heatNow && !F.heating) { A.play('fire'); A.play('whoosh', .6); G.fireT = 0; }
+      F.heating = heatNow;
+      if (hs) {
+        if (ET.TYPES[hs.type].noHeat) hs.heat = 100;
+        else if (nearF) { const was = hs.heat; hs.heat = Math.min(100, hs.heat + dt * 48 * Math.pow(1.3, S.upg.rack || 0) * (1 + .12 * (S.upg.forge || 0))); if ((G.fireT = (G.fireT || 0) + dt) > 1.4) { G.fireT = 0; A.play('fire', .5); } if (was < 100 && hs.heat >= 100) { A.play('succ', .6); G.toast('새빨갛게 달궈졌다! 모루로 가져가세요', 'good'); } }
+        else hs.heat = Math.max(0, hs.heat - dt * 1.4 * ck);
+      }
+      if (S.anvil) { if (ET.TYPES[S.anvil.type].noHeat) S.anvil.heat = 100; else S.anvil.heat = Math.max(0, S.anvil.heat - dt * 1.1 * ck); }
+      S.rack.forEach(x => { if (x.heat > 0 && !ET.TYPES[x.type].noHeat) x.heat = Math.max(0, x.heat - dt * 6); }); (S.floor || []).forEach(x => { if (x.heat > 0 && !ET.TYPES[x.type].noHeat) x.heat = Math.max(0, x.heat - dt * 6); });
+      if ((G.heatVisT = (G.heatVisT || 0) + dt) > .12) { G.heatVisT = 0; if (S.anvil) F.setAnvilSword(S.anvil); if (hs && F.setHandHeat) F.setHandHeat(hs.heat); const hb = $('#heatBar'); const shown = G.lastCtx === 'hand' ? hs : G.lastCtx === 'anvil' ? S.anvil : null; if (hb && shown) hb.style.width = shown.heat + '%'; const k = shown ? (shown.heat >= 90 ? 3 : shown.heat >= 60 ? 2 : shown.heat >= 25 ? 1 : 0) : -1; if (k !== G.heatBand) { G.heatBand = k; G.renderHud(); } }
+      if (S.anvil && G.hold && !G.busy && !(F.hammerAnim > 0)) {
+        const sw = S.anvil, nearA = F.near('anvil');
+        if (!nearA || S.hand) G.hold = false;
         else if (G.prefs.safeB && ET.odds(sw, S, 'good').b * 100 > G.prefs.safeB && S.rushT <= 0 && S.golden <= 0) { G.hold = false; G.toast('안전 정지 — 파괴 확률이 ' + G.prefs.safeB + '%를 넘었다', 'bad'); G.render(); }
         else if (G.prefs.target && sw.lv >= G.prefs.target) { G.hold = false; G.render(); }
+        else if (sw.heat < 25 && !ET.TYPES[sw.type].noHeat && G.prefs.autoHeat) { G.hold = false; G.toast('검이 식었다 — 연속 타격을 멈췄다 (들고 화로로)', 'bad'); }
         else G.strike();
       }
-    } else G.hold = false;
-    // panel follows where you stand
-    const ns = F.nearest && F.nearest(); if (ns !== G.lastNear) { G.lastNear = ns; if (ns && ns !== G.station && !F.walk && performance.now() - (G.manualT || 0) > 800) G.go(ns, true); }
-    if (performance.now() - (G.nearRT || 0) > 600) { G.nearRT = performance.now(); const key = ['anvil', 'tribute', 'shop'].map(k => F.near(k) ? 1 : 0).join(''); if (key !== G.nearKey) { G.nearKey = key; G.render(); } }
+    } else { G.hold = false; F.heating = false; }
+    if (!S.anvil) G.hold = false;
+    // popup closes when you walk away; context HUD follows where you are
+    if (G.panel && !F.near(G.panel)) G.closePanel();
+    if ((G.ctxT = (G.ctxT || 0) + dt) > .2) { G.ctxT = 0; if (G.ctxMode() !== G.lastCtx) G.renderHud(); }
     if (S.rushT > 0) { S.rushT -= dt; if (S.rushT <= 0) { S.rushT = 0; F.rushFx(false); G.render(); } }
     if (S.anvil && S.phase === 'forge') {
       const sp = Math.min(2.1, .85 + S.anvil.lv * .03) * (S.rushT > 0 ? .8 : 1) * Math.pow(.985, ET.masteryOf(S.strikes));

@@ -101,7 +101,7 @@ window.ET = window.ET || {};
     hammer: { name: '망치 단련', max: 12, p: 300, d: '단계마다 파괴 ×0.94, 대성공 +0.6%p' },
     anvil: { name: '모루 보강', max: 10, p: 260, d: '단계마다 손상 ×0.93' },
     forge: { name: '화로 개량', max: 6, p: 240, d: '단계마다 열기 소모 -15%, 폭주 게이지 +12%' },
-    rack: { name: '거치대 증축', max: 4, p: 200, d: '단계마다 거치대 +2칸' }
+    rack: { name: '풀무 개량', max: 5, p: 200, d: '단계마다 화로에서 30% 빨리 달궈지고, 검이 20% 천천히 식는다' }
   };
   // daily commissions (seeded so everyone in a room gets the same board)
   ET.questsFor = function (seed, day) {
@@ -202,7 +202,7 @@ window.ET = window.ET || {};
     }
     if (q === 'perfect') { b *= .55; const t = Math.min(h, .07); h -= t; }
     else if (q === 'miss') { b *= 1.25; gs *= .5; }
-    if (sw.heat != null && sw.heat < 25 && !T.noHeat) { gs = 0; d *= 1.5; }
+    if (sw.heat != null && !T.noHeat) { const c = Math.max(0, Math.min(1, (60 - sw.heat) / 60)); gs *= (1 - c) * (sw.heat >= 90 ? 1.12 : 1); d *= 1 + c * 2.2; b *= 1 + c * .6; }
     if (st && st.rushT > 0) { h += b; b = 0; }
     gs = Math.min(gs, .45);
     let s = 1 - (b + gs + d + h);

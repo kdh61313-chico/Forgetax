@@ -136,7 +136,7 @@
     const ctr = F.counter = M.makeCounter(); ctr.position.set(2.75, 0, -2.6); scene.add(ctr); click(ctr, 'tribute');
     const bell = F.bell = M.makeBell(); bell.position.set(3.95, 1.0, -2.6); scene.add(bell); click(bell, 'bell');
     // ---- rack ----
-    const rack = F.rack = M.makeRack(10); rack.position.set(6.35, 0, .3); scene.add(rack); click(rack, 'rackview');
+    const rack = F.rack = M.makeRack(10); rack.position.set(6.35, 0, .3); scene.add(rack); click(rack, 'rackview'); click(floor, 'floor');
     // ---- merchant + pedestal ----
     const mer = F.merchant = M.makeMerchant(); mer.position.set(-4.4, 0, 3.4); mer.rotation.y = Math.PI * .78; scene.add(mer); click(mer, 'shop');
     F.altarIcons = new THREE.Group(); F.altarIcons.position.set(0, .93, .78); mer.add(F.altarIcons);
@@ -161,13 +161,13 @@
     F.dust = new M.Particles(scene, 90, 'rgba(160,180,255,.5)');
     F.flameP = new M.Particles(scene, 160, 'rgba(255,120,30,.9)');
     for (let i = 0; i < 90; i++) F.dust.emit(V(-3 + Math.random() * 4, Math.random() * 4, -1 + Math.random() * 2), V((Math.random() - .5) * .03, (Math.random() - .5) * .02, (Math.random() - .5) * .03), 9999, .015 + Math.random() * .015, 0xc0d0ff, 0, 1);
-    F.shards = []; F.anvilSword = null; F.rackMeshes = {}; F.counterMeshes = {}; F.time = 0;
+    F.shards = []; F.anvilSword = null; F.rackMeshes = {}; F.counterMeshes = {}; F.floorMeshes = {}; F.handMesh = null; F.time = 0;
     M.lin(scene);
     return scene;
   };
   F.setStation = function (name, instant) { const s = F.STATIONS[name]; if (!s) return; F.station = name; F.camPosT.copy(s.pos); F.camLookT.copy(s.look); if (instant) { F.camPos.copy(s.pos); F.camLook.copy(s.look); } };
-  F.enterPlay = function () { F.mode = 'play'; F.station = 'play'; const P = F.P; P.x = .02; P.z = 1.15; P.yaw = 0; P.pitch = -.42; F.walk = null; F.vm.visible = true; };
-  F.enterTitle = function () { F.mode = 'title'; F.setStation('title'); F.vm.visible = false; F.walk = null; };
+  F.enterPlay = function () { F.mode = 'play'; F.station = 'play'; const P = F.P; P.x = .02; P.z = 1.15; P.yaw = 0; P.pitch = -.42; F.walk = null; F.vm.visible = !(ET.G.S && ET.G.S.hand); };
+  F.enterTitle = function () { F.mode = 'title'; F.setStation('title'); F.vm.visible = false; F.walk = null; if (F.handMesh) { F.cam.remove(F.handMesh); F.handMesh = null; } };
   F.look = function (dx, dy) { const P = F.P; P.yaw -= dx; P.pitch = U.clamp(P.pitch - dy, -1.35, 1.2); if (dx || dy) F.walkLook = false; };
   F.dist = st => { const sp = F.SPOTS[st]; return sp ? Math.hypot(F.P.x - sp.c.x, F.P.z - sp.c.z) : 99; };
   F.near = st => F.mode !== 'play' || F.dist(st) < F.SPOTS[st].r;
@@ -207,11 +207,12 @@
     let i = 0; while (i < pts.length) { let j = pts.length - 1; while (j > i && !clear(a, pts[j])) j--; out.push(pts[j]); a = pts[j]; i = j + 1; }
     return out;
   }
-  F.walkTo = function (st) {
+  F.walkTo = function (st, then) {
     const sp = F.SPOTS[st]; if (!sp || F.mode !== 'play') return; const P = F.P;
+    if (F.near(st) && then) { then(); return; }
     let path = null; try { path = findPath(P.x, P.z, sp.stand.x, sp.stand.z); } catch (e) { }
     if (path && path.length) path[path.length - 1] = sp.stand.clone(); else path = [sp.stand.clone()];
-    F.walk = { to: path.shift(), path, look: sp.look.clone(), st, t: 0 }; F.walkLook = true;
+    F.walk = { to: path.shift(), path, look: sp.look.clone(), st, t: 0, then }; F.walkLook = true;
   };
   F.relicIcons = [];
   F.syncBoard = function (qs) {
@@ -222,7 +223,7 @@
     (F.relicSlots || []).forEach((slot, i) => { const id = list[i]; slot.userData.label.material.map = M.labelTex(id ? ET.RELIC[id].name : '— 비어 있음 —', id ? ET.RELIC[id].r : 0); slot.userData.label.material.needsUpdate = true; slot.userData.glow.intensity = id ? .55 : .08; if (!id) return; const ic = M.makeRelicIcon(ET.RELIC[id].tag); ic.position.y = .2; ic.scale.setScalar(1.25); M.lin(ic); slot.add(ic); F.relicIcons.push(ic); });
   };
   F.resize = function (w, h, sheetW) {
-    F.W = w; F.H = h; F.sheet = sheetW || 0;
+    F.W = w; F.H = h; F.sheet = 0;
     const s = F.sheet / w, fullW = w * (1 + s);
     F.cam.fov = h > w ? 62 : 50; F.cam.aspect = fullW / h;
     if (s > 0) F.cam.setViewOffset(fullW, h, w * s, 0, w, h); else F.cam.clearViewOffset();
@@ -240,25 +241,73 @@
     if (!F.anvilSword) {
       const m = M.makeSword(sw.type, sw.lv); m.userData.key = swKey(sw); m.userData.id = sw.id;
       m.quaternion.copy(Q_ANVIL); m.position.set(.52, F.anvilTop + .012, .0);
-      m.traverse(o => { if (o.isMesh) { o.userData.action = 'strike'; F.clickables.push(o); } });
+      m.traverse(o => { if (o.isMesh) { o.userData.action = 'strike'; o.userData.id = sw.id; F.clickables.push(o); } });
       F.scene.add(m); F.anvilSword = m; m.userData.drop = 1;
     }
     M.setHeat(F.anvilSword, sw.heat);
     const h = (sw.heat || 0) / 100; F.anvilLight.intensity = h * h * 2.2 + (F.anvilSword.userData.fin ? .6 : 0);
     F.anvilLight.color.set(0xff6a20).lerp(F.anvilSword.userData.glow, F.anvilSword.userData.fin ? .5 : 0);
   };
+  function mk(map, sw, holder) {
+    let m = map[sw.id];
+    if (m && m.userData.key !== swKey(sw)) { F.scene.remove(m); m = null; }
+    if (!m) { m = M.makeSword(sw.type, sw.lv); m.userData.key = swKey(sw); m.userData.id = sw.id; m.traverse(o => { if (o.isMesh) { o.userData.action = holder; o.userData.id = sw.id; F.clickables.push(o); } }); F.scene.add(m); map[sw.id] = m; }
+    return m;
+  }
   function syncGroup(map, list, place, holder) {
     const seen = {};
-    list.forEach((sw, i) => {
-      seen[sw.id] = 1; let m = map[sw.id];
-      if (m && m.userData.key !== swKey(sw)) { F.scene.remove(m); m = null; }
-      if (!m) { m = M.makeSword(sw.type, sw.lv); m.userData.key = swKey(sw); m.userData.id = sw.id; m.traverse(o => { if (o.isMesh) { o.userData.action = holder; o.userData.id = sw.id; F.clickables.push(o); } }); F.scene.add(m); map[sw.id] = m; }
-      place(m, i, list.length); M.setHeat(m, 0);
-    });
+    list.forEach((sw, i) => { seen[sw.id] = 1; const m = mk(map, sw, holder); if (!m.userData.flyT) place(m, i, list.length); M.setHeat(m, sw.heat || 0); });
     for (const id in map) if (!seen[id]) { F.scene.remove(map[id]); delete map[id]; }
   }
-  F.syncRack = function (rack) { syncGroup(F.rackMeshes, rack, (m, i) => { const p = M.rackSlotPos(i); m.quaternion.copy(Q_RACK); m.position.set(F.rack.position.x + p.x, p.y, F.rack.position.z + p.z); }, 'rack'); };
-  F.syncCounter = function (counter) { syncGroup(F.counterMeshes, counter, (m, i, n) => { const sp = Math.min(.09, .48 / Math.max(1, n)); m.quaternion.copy(Q_TRAY); m.position.set(F.counter.position.x - .45, F.counter.userData.trayY + .008 + i * .002, F.counter.position.z - (n - 1) * sp / 2 + i * sp); m.userData.fly = 0; }, 'counter'); };
+  const Q_FLOOR = Q_TRAY.clone(), _qy = new THREE.Quaternion();
+  function floorPose(m, p) { _qy.setFromAxisAngle(V(0, 1, 0), p[2]); m.quaternion.copy(_qy).multiply(Q_FLOOR); m.position.set(p[0], .028, p[1]); }
+  F.syncFloor = function (list) { syncGroup(F.floorMeshes, list, (m, i) => floorPose(m, list[i].p || [0, 1, 0]), 'sword'); };
+  F.blockedAt = (x, z) => blocked(x, z);
+  // a free spot on the floor in front of the player
+  F.dropPoint = function () {
+    const P = F.P, fx = -Math.sin(P.yaw), fz = -Math.cos(P.yaw);
+    for (const d of [.9, .65, .45, 1.2]) { const x = P.x + fx * d, z = P.z + fz * d; if (!blocked(x, z)) return { x, z, r: P.yaw + Math.PI / 2 + (Math.random() - .5) * .5 }; }
+    return { x: P.x, z: P.z, r: P.yaw + Math.PI / 2 };
+  };
+  // where the dragon's tossed swords land: open floor between the cage and the anvil
+  F.floorSpot = function () {
+    const S = ET.G.S, others = (S && S.floor) || [];
+    for (let k = 0; k < 40; k++) { const x = -1.5 + Math.random() * 2.9, z = -2.6 + Math.random() * 1.45; if (blocked(x, z) || (Math.abs(x) < .8 && z > -2.35)) continue; if (others.some(o => o.p && Math.hypot(o.p[0] - x, o.p[1] - z) < .42)) continue; return { x, z, r: Math.random() * 6.28 }; }
+    return { x: -1 + Math.random() * 2, z: -1.8, r: Math.random() * 6.28 };
+  };
+  F.throwSword = function (sw, delay) {
+    const m = mk(F.floorMeshes, sw, 'sword'); const hw = V(0, 2.2, -5.5); try { F.dragon.userData.head.getWorldPosition(hw); } catch (e) { }
+    m.visible = false; m.userData.flyT = -(delay || 0); m.userData.from = hw.clone().add(V(0, -.1, .4)); m.userData.p = sw.p.slice();
+    floorPose(m, sw.p); m.userData.q1 = m.quaternion.clone();
+  };
+  function updateThrown(dt) {
+    for (const id in F.floorMeshes) {
+      const m = F.floorMeshes[id], u = m.userData; if (!u.flyT) continue;
+      u.flyT += dt; if (u.flyT < 0) continue;
+      if (!m.visible) { m.visible = true; ET.Audio.play('whoosh', .8); }
+      const T = 1.05, k = Math.min(1, u.flyT / T), to = V(u.p[0], .028, u.p[1]);
+      m.position.lerpVectors(u.from, to, k); m.position.y += Math.sin(k * Math.PI) * 1.5;
+      m.quaternion.copy(u.q1); m.rotateZ((1 - k) * 9); m.rotateX((1 - k) * 4);
+      if (k >= 1) { u.flyT = 0; floorPose(m, u.p); ET.Audio.play('clang', .55); F.shake = Math.max(F.shake, .012); for (let i = 0; i < 18; i++) { const a = Math.random() * 6.28; F.sparks.emit(to.clone().add(V(0, .03, 0)), V(Math.cos(a) * 1.2, .5 + Math.random() * 1.2, Math.sin(a) * 1.2), .3 + Math.random() * .3, .01, 0xffa050, 7, .98); } for (let i = 0; i < 6; i++) F.smoke.emit(to.clone(), V((Math.random() - .5) * .3, .15, (Math.random() - .5) * .3), 1.2, .18, 0x5a5048, -.03, .99, 3); }
+    }
+  }
+  F.updateThrown = updateThrown;
+  // ---- the sword in your hand (first-person) ----
+  const HAND_POS = V(.19, -.2, -.5), HAND_Q = (() => { const y = V(-.24, .7, -.67).normalize(), z0 = V(.45, .15, .88), z = z0.sub(y.clone().multiplyScalar(z0.dot(y))).normalize(), x = new THREE.Vector3().crossVectors(y, z); return basis(x, y, z); })();
+  F.setHandSword = function (sw) {
+    if (F.handMesh && (!sw || F.handMesh.userData.key !== swKey(sw) || F.handMesh.userData.id !== sw.id)) { F.cam.remove(F.handMesh); F.handMesh = null; }
+    F.vm.visible = F.mode === 'play' && !sw;
+    if (!sw) return;
+    if (!F.handMesh) { const m = M.makeSword(sw.type, sw.lv); m.userData.key = swKey(sw); m.userData.id = sw.id; m.scale.setScalar(.56); m.position.copy(HAND_POS); m.quaternion.copy(HAND_Q); m.traverse(o => { if (o.isMesh) { o.castShadow = false; o.renderOrder = 2; } }); F.cam.add(m); F.handMesh = m; m.userData.lift = 1; }
+    M.setHeat(F.handMesh, sw.heat || 0);
+  };
+  F.setHandHeat = h => { if (F.handMesh) M.setHeat(F.handMesh, h); };
+  // while dragging, the held sword follows the cursor
+  F.dragAt = function (x, y) { if (!F.handMesh) return; const v = V(x / F.W * 2 - 1, -(y / F.H) * 2 + 1, .5).applyMatrix4(F.cam.projectionMatrixInverse).normalize().multiplyScalar(.75); F.handMesh.userData.drag = v; };
+  F.dragEnd = function () { if (F.handMesh) F.handMesh.userData.drag = null; };
+  F.nearFurnace = () => F.mode === 'play' && Math.hypot(F.P.x - (-2.6), F.P.z - (-.45)) < 1.75;
+  F.syncRack = function (rack) { syncGroup(F.rackMeshes, rack, (m, i) => { const p = M.rackSlotPos(i % 10), L = Math.floor(i / 10); m.quaternion.copy(Q_RACK); m.position.set(F.rack.position.x + p.x - L * .085, p.y - L * .04, F.rack.position.z + p.z + (L % 2 ? .14 : 0)); }, 'sword'); };
+  F.syncCounter = function (counter) { syncGroup(F.counterMeshes, counter, (m, i, n) => { const sp = Math.min(.09, .48 / Math.max(1, n)); m.quaternion.copy(Q_TRAY); m.position.set(F.counter.position.x - .45, F.counter.userData.trayY + .008 + i * .002, F.counter.position.z - (n - 1) * sp / 2 + i * sp); m.userData.fly = 0; }, 'sword'); };
   F.syncAltar = function (offers) { while (F.altarIcons.children.length) F.altarIcons.remove(F.altarIcons.children[0]); (offers || []).forEach((r, i) => { if (!r || r.sold) return; const ic = M.makeRelicIcon(ET.RELIC[r.id].tag); ic.position.set((i - 1) * .36, .06, 0); ic.scale.setScalar(1.1); M.lin(ic); F.altarIcons.add(ic); }); };
   F.goldenFx = function (on) { F.golden = on; if (F.anvilSword) { const bm = F.anvilSword.userData.bladeMat; if (on) { bm.userData.prevEm = bm.emissive.clone(); bm.emissive.set(0x7a5010); } else if (bm.userData.prevEm) { bm.emissive.copy(bm.userData.prevEm); } } };
   F.evolveFx = function () { F.shake = .08; F.flashLight = 2.4; const top = V(0, F.anvilTop + .05, 0); for (let i = 0; i < 90; i++) { const a = i / 90 * Math.PI * 2; F.gold.emit(top, V(Math.cos(a) * 2.6, .4 + Math.random() * 1.5, Math.sin(a) * 2.6), 1, .05, 0xfff0c0, 0, .94); } for (let i = 0; i < 40; i++) F.flameP.emit(top, V((Math.random() - .5) * .6, 1.5 + Math.random() * 2, (Math.random() - .5) * .6), .9, .12, 0xffc060, -.6, .96); };
@@ -280,7 +329,7 @@
     if (F.walk) {
       const dx = F.walk.to.x - P.x, dz = F.walk.to.z - P.z, d = Math.hypot(dx, dz);
       F.walk.t += dt;
-      if (d < (F.walk.path.length ? .3 : .1) || F.walk.t > 9) { if (F.walk.path.length && F.walk.t <= 9) { F.walk.to = F.walk.path.shift(); } else { const st = F.walk.st; F.walk = null; if (st && ET.G.S) { ET.G.lastNear = F.nearest(); ET.G.go(st === 'furnace' ? 'anvil' : st, true); } } }
+      if (d < (F.walk.path.length ? .3 : .1) || F.walk.t > 9) { if (F.walk.path.length && F.walk.t <= 9) { F.walk.to = F.walk.path.shift(); } else { const st = F.walk.st, then = F.walk.then; F.walk = null; if (then) then(); else if (st && ET.G.S) ET.G.go(st); } }
       else { vx = dx / d * Math.min(sp, d * 4); vz = dz / d * Math.min(sp, d * 4); }
       if (F.walkLook) { const tgt = (F.walk || {}).look || F.lastLook; }
     } else if (manual) {
@@ -330,6 +379,7 @@
     const d = F.ds;
     if (kind === 'happy') { d.tfwd = .5; d.tmouth = .15; clearTimeout(d.to); d.to = setTimeout(() => { d.tfwd = 0; d.tmouth = 0; }, 1800); }
     if (kind === 'peek') { d.tfwd = .8; d.tmouth = .05; clearTimeout(d.to); d.to = setTimeout(() => { d.tfwd = 0; d.tmouth = 0; }, 2600); }
+    if (kind === 'toss') { d.tfwd = 1; d.tmouth = .55; ET.Audio.play('roar', .35); clearTimeout(d.to); d.to = setTimeout(() => { d.tfwd = 0; d.tmouth = 0; }, 2000); }
     if (kind === 'angry') { d.tfwd = 1; d.tmouth = 1; d.roarT = 1.6; F.shake = .12; ET.Audio.play('roar'); clearTimeout(d.to); d.to = setTimeout(() => { d.tfwd = 0; d.tmouth = 0; }, 2400); }
   };
   F.tributeFly = function () {
@@ -342,7 +392,7 @@
   F.pick = function (x, y, maxD) {
     mv.set(x / F.W * 2 - 1, -(y / F.H) * 2 + 1); ray.setFromCamera(mv, F.cam); ray.far = maxD || 100;
     const hit = ray.intersectObjects(F.clickables.filter(o => inScene(o)), false)[0];
-    return hit ? hit.object.userData : null;
+    F.hitPoint = hit ? hit.point : null; return hit ? hit.object.userData : null;
   };
   F.centerX = () => (F.W - (F.sheet || 0)) / 2;
   F.pickCenter = () => F.pick(F.centerX(), F.H / 2, 3.2);
@@ -404,6 +454,8 @@
     // anvil sword
     if (F.anvilSword) { const u = F.anvilSword.userData; if (u.drop > 0) { u.drop = Math.max(0, u.drop - dt * 4); F.anvilSword.position.y = F.anvilTop + .012 + u.drop * u.drop * .4; } if (u.orb) u.orb.rotation.y = t * 1.2; if (u.rune) u.rune.opacity = (.35 + u.tier * .1) * (.8 + Math.sin(t * 2.5) * .2); }
     for (const id in F.rackMeshes) { const u = F.rackMeshes[id].userData; if (u.orb) u.orb.rotation.y = t; }
+    updateThrown(dt);
+    if (F.handMesh) { const u = F.handMesh.userData, tgt = u.drag || HAND_POS; u.lift = Math.max(0, (u.lift || 0) - dt * 4); F.handMesh.position.lerp(tgt, Math.min(1, dt * 16)); if (!u.drag) { F.handMesh.position.y += Math.sin(F.P.bobT || 0) * .006 - u.lift * u.lift * .25; } if (F.heating) F.handMesh.position.x += (Math.random() - .5) * .002; if (u.orb) u.orb.rotation.y = t; if (F.heating && Math.random() < .5) { const wp = new THREE.Vector3(); F.handMesh.getWorldPosition(wp); F.embers.emit(wp.add(V((Math.random() - .5) * .2, .2 + Math.random() * .2, (Math.random() - .5) * .2)), V((Math.random() - .5) * .3, .5 + Math.random() * .6, (Math.random() - .5) * .3), .7, .01, 0xffa040, -.2, .98); } }
     for (const id in F.counterMeshes) { const m = F.counterMeshes[id]; if (m.userData.fly) { m.userData.fly += dt; m.position.z -= dt * 2.4 * m.userData.fly; m.position.y += dt * (1.2 - m.userData.fly); m.rotation.z += dt * 2; } }
     if (F.flashLight) { F.flashLight = Math.max(0, F.flashLight - dt * 3); F.anvilLight.intensity += F.flashLight * 3; }
     if (F.bellT > 0) { F.bellT = Math.max(0, F.bellT - dt * .7); F.bell.userData.bell.rotation.z = Math.sin(t * 20) * .3 * F.bellT; }
